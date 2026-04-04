@@ -1,0 +1,129 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) - Dark Mode 'Control Room' Variant",
+  "domain_context": "Security SaaS, Password Manager, Vault, Dashboard",
+  "design_vision": "A highly technical, impenetrable 'Control Room'. It prioritizes deep blacks with high-contrast sharp edges and vivid accents to indicate security states. No soft, muddy shadows. Dense data layout, precise typography, and subtle glowing 'Tracing Beams' to satisfy the 'sleek gradients' requirement without looking decorative.",
+  "colors": {
+    "background": {
+      "base": "#050505",
+      "surface": "#0F0F11",
+      "surface_elevated": "#1A1A1D"
+    },
+    "border": {
+      "default": "#27272A",
+      "focus": "#3B82F6",
+      "glass": "rgba(255, 255, 255, 0.08)"
+    },
+    "primary": {
+      "DEFAULT": "#3B82F6",
+      "hover": "#60A5FA",
+      "glow": "rgba(59, 130, 246, 0.4)"
+    },
+    "status": {
+      "secure": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444"
+    },
+    "text": {
+      "primary": "#F8FAFC",
+      "secondary": "#94A3B8",
+      "tertiary": "#64748B",
+      "code": "#38BDF8"
+    },
+    "gradient_accent": "linear-gradient(to right, #3B82F6, #10B981)"
+  },
+  "typography": {
+    "anti_default_rule_applied": true,
+    "fonts": {
+      "heading": "'Chivo', sans-serif",
+      "body": "'IBM Plex Sans', sans-serif",
+      "mono": "'JetBrains Mono', monospace"
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-black",
+      "h2": "text-2xl sm:text-3xl tracking-tight font-bold",
+      "h3": "text-xl sm:text-2xl tracking-tight font-semibold",
+      "body": "text-base leading-relaxed",
+      "mono": "text-sm tracking-widest font-mono",
+      "label": "text-xs tracking-[0.2em] uppercase font-bold"
+    }
+  },
+  "layout_and_spacing": {
+    "philosophy": "Generous Spacing (p-6 to p-12) for containers, tight dense spacing for inner dashboard data (gap-4).",
+    "dashboard_grid": "MODE B: 'Control Room' Grid. grid-cols-1 md:grid-cols-3 lg:grid-cols-4. Strict height matching.",
+    "bento_spans": {
+      "main_vault": "col-span-2 row-span-2 md:col-span-3",
+      "generator_widget": "col-span-1",
+      "sidebar": "w-64 fixed or col-span-1"
+    }
+  },
+  "surfaces": {
+    "cards": {
+      "style": "bg-[#0F0F11] border border-[#27272A] rounded-md shadow-none",
+      "hover": "-translate-y-[1px] shadow-[0_8px_30px_rgba(0,0,0,0.5)] border-[#3F3F46] transition-all duration-200"
+    },
+    "glassmorphism": {
+      "usage": "Sticky headers, Context menus",
+      "style": "bg-[#050505]/70 backdrop-blur-xl border-b border-white/10 saturate-150"
+    },
+    "tracing_beam": {
+      "usage": "Active 'Space' or high-security container (like the password generator)",
+      "implementation": "Animated gradient border mask, blending #3B82F6 to #10B981"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#3B82F6] text-white hover:bg-[#60A5FA] rounded-md px-6 py-2 font-medium tracking-wide",
+      "secondary": "bg-transparent border border-[#27272A] text-[#F8FAFC] hover:bg-[#1A1A1D] rounded-md px-6 py-2"
+    },
+    "inputs": {
+      "default": "bg-[#050505] border border-[#27272A] rounded-md px-4 py-2 text-[#F8FAFC] focus:ring-1 focus:ring-[#3B82F6] font-mono for credentials"
+    },
+    "badges": {
+      "secure": "bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20 px-2 py-0.5 rounded text-xs font-mono"
+    }
+  },
+  "animation": {
+    "hover": "Transition transform and border color. No slow fades (tech feels fast).",
+    "micro": "Framer motion for copying passwords (subtle scale down and up, green checkmark fade in)."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "instructions": "Use Phosphor Icons (Duotone for main nav, Regular for dense data rows). Run `yarn add @phosphor-icons/react`"
+  },
+  "images": [
+    {
+      "url": "https://static.prod-images.emergentagent.com/jobs/1c84658e-2f93-4ed7-8258-1a5b6c6f3bd0/images/c109a796de88833f4f90d54ece761d2fdb05e7dddbfaf3ce7c06c1a5044bb6e8.png",
+      "category": "login_background",
+      "description": "Abstract dark obsidian background with subtle glowing cyan and emerald grid lines. Use with bg-cover and bg-center."
+    },
+    {
+      "url": "https://static.prod-images.emergentagent.com/jobs/1c84658e-2f93-4ed7-8258-1a5b6c6f3bd0/images/b44ad2c00b9b26c9a9710d5486a302f1df52397154d4457470e9ab85fa5421c1.png",
+      "category": "empty_state_vault",
+      "description": "3D render of a sleek metallic vault lock dial. Use in the center of the screen when a vault is empty."
+    },
+    {
+      "url": "https://static.prod-images.emergentagent.com/jobs/1c84658e-2f93-4ed7-8258-1a5b6c6f3bd0/images/86570f8bc736baa0ab53e051598de58abce6b83f2dd63c06db463ba01583f699.png",
+      "category": "app_texture_bg",
+      "description": "Abstract soft dark gradient mesh. Can be used as a subtle background layer for the settings or spaces view."
+    },
+    {
+      "url": "https://images.pexels.com/photos/28428584/pexels-photo-28428584.jpeg",
+      "category": "marketing_hero_3d",
+      "description": "Dynamic 3D geometric shapes creating a modern abstract design. Good for a landing page hero if built."
+    }
+  ],
+  "accessibility_and_testing": {
+    "contrast": "Ensure minimum 4.5:1 ratio for standard text and 3:1 for large text over dark backgrounds. Check APCA contrast.",
+    "data_testid": "MANDATORY. All interactive elements must have data-testid attributes (e.g., data-testid='copy-password-btn', data-testid='create-space-form')."
+  },
+  "instructions_to_main_agent": [
+    "NEVER use generic Inter for headings. Use Chivo for headings, IBM Plex Sans for body, and JetBrains Mono for all credentials/passwords.",
+    "Ensure 'Glassmorphism' on sticky headers is completely separated with a 1px white/10 border. Avoid pure transparent overlays.",
+    "Do NOT use teal (#1B93A4) or purple. Strictly adhere to the Cobalt Blue (#3B82F6) and Emerald Green (#10B981) accents.",
+    "Dashboards must use the 'Control Room' strict bento grid without excessive rounded corners (use max rounded-md).",
+    "Integrate Shadcn primitives heavily for standard elements, but style them precisely to match the borders, backgrounds, and fonts specified above.",
+    "Use Phosphor icons. Do not rely on lucide-react unless specifically needed for shadcn internal dependencies, but override with Phosphor where visible.",
+    "When revealing passwords, use a subtle text transition, and ensure the password field uses a strict monospace font."
+  ]
+}
