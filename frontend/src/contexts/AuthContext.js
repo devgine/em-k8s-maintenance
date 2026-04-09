@@ -8,121 +8,62 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isLocked, setIsLocked] = useState(false);
-  const [lastActivity, setLastActivity] = useState(Date.now());
-  
-  const AUTO_LOCK_TIME = 15 * 60 * 1000; // 15 minutes
+  const [token, setToken] = useState(localStorage.getItem('token'));
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  useEffect(() => {
-    const handleActivity = () => {
-      setLastActivity(Date.now());
-      if (isLocked && user) {
-        setIsLocked(false);
-      }
-    };
-
-    window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
-    window.addEventListener('click', handleActivity);
-
-    return () => {
-      window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
-      window.removeEventListener('click', handleActivity);
-    };
-  }, [user, isLocked]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const interval = setInterval(() => {
-      const timeSinceLastActivity = Date.now() - lastActivity;
-      if (timeSinceLastActivity >= AUTO_LOCK_TIME && !isLocked) {
-        setIsLocked(true);
-      }
-    }, 10000); // Check every 10 seconds
-
-    return () => clearInterval(interval);
-  }, [lastActivity, user, isLocked]);
+    if (token) {
+      checkAuth();
+    } else {
+      setLoading(false);
+    }
+  }, [token]);
 
   const checkAuth = async () => {
     try {
-      const { data } = await axios.get(`${API_URL}/api/auth/me`, {
-        withCredentials: true
+      const { data } = await axios.get(`${API_URL}/api/user/info`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setUser(data);
     } catch (error) {
-      setUser(false);
+      console.error('Auth check failed:', error);
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem('token');
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (email, password) => {
-    const { data } = await axios.post(
-      `${API_URL}/api/auth/login`,
-      { email, password },
-      { withCredentials: true }
-    );
-    setUser(data);
-    setLastActivity(Date.now());
-    return data;
+  const login = (accessToken) => {
+    localStorage.setItem('token', accessToken);
+    setToken(accessToken);
   };
 
-  const register = async (email, password, name) => {
-    const { data } = await axios.post(
-      `${API_URL}/api/auth/register`,
-      { email, password, name },
-      { withCredentials: true }
-    );
-    setUser(data);
-    setLastActivity(Date.now());
-    return data;
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
   };
 
-  const logout = async () => {
-    try {
-      await axios.post(
-        `${API_URL}/api/auth/logout`,
-        {},
-        { withCredentials: true }
-      );
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      setUser(false);
-      setIsLocked(false);
-    }
+  const hasRole = (role) => {
+    return user?.roles?.includes(role) || false;
   };
 
-  const unlockSession = async (password) => {
-    try {
-      await axios.post(
-        `${API_URL}/api/auth/login`,
-        { email: user.email, password },
-        { withCredentials: true }
-      );
-      setIsLocked(false);
-      setLastActivity(Date.now());
-      return true;
-    } catch (error) {
-      throw error;
-    }
-  };
+  const isAdmin = () => hasRole('admin');
+  const isUser = () => hasRole('user');
+  const isReadonly = () => hasRole('readonly');
 
   return (
     <AuthContext.Provider value={{
       user,
       loading,
-      isLocked,
+      token,
       login,
-      register,
       logout,
-      unlockSession,
+      hasRole,
+      isAdmin,
+      isUser,
+      isReadonly,
       checkAuth
     }}>
       {children}

@@ -1,0 +1,267 @@
+# Kubernetes manifests for K8s Maintenance Manager
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-maintenance
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-maintenance-sa
+  namespace: k8s-maintenance
+
+---
+# ClusterRole - Permissions for managing Traefik Middlewares
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-maintenance-role
+rules:
+  # Traefik Middleware permissions
+  - apiGroups: ["traefik.io"]
+    resources: ["middlewares"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Namespace permissions
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-maintenance-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-maintenance-role
+subjects:
+  - kind: ServiceAccount
+    name: k8s-maintenance-sa
+    namespace: k8s-maintenance
+
+---
+# MongoDB Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: k8s-maintenance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:7
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-pvc
+
+---
+# MongoDB PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+  namespace: k8s-maintenance
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# MongoDB Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: k8s-maintenance
+spec:
+  selector:
+    app: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+
+---
+# Backend ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: k8s-maintenance
+data:
+  MONGO_URL: "mongodb://mongodb:27017"
+  DB_NAME: "k8s_maintenance"
+  CORS_ORIGINS: "*"
+  IN_CLUSTER: "true"
+  TRAEFIK_API_VERSION: "traefik.io/v1alpha1"
+  # Update these with your Keycloak details
+  KEYCLOAK_SERVER_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "maintenance"
+  KEYCLOAK_CLIENT_ID: "k8s-maintenance-app"
+
+---
+# Backend Secret (Update with your values!)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secret
+  namespace: k8s-maintenance
+type: Opaque
+stringData:
+  KEYCLOAK_CLIENT_SECRET: "your-client-secret-here"
+
+---
+# Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-maintenance-backend
+  namespace: k8s-maintenance
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-maintenance-backend
+  template:
+    metadata:
+      labels:
+        app: k8s-maintenance-backend
+    spec:
+      serviceAccountName: k8s-maintenance-sa
+      containers:
+        - name: backend
+          image: your-registry/k8s-maintenance-backend:latest
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secret
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+---
+# Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-maintenance-backend
+  namespace: k8s-maintenance
+spec:
+  selector:
+    app: k8s-maintenance-backend
+  ports:
+    - port: 8001
+      targetPort: 8001
+
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-maintenance-frontend
+  namespace: k8s-maintenance
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-maintenance-frontend
+  template:
+    metadata:
+      labels:
+        app: k8s-maintenance-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: your-registry/k8s-maintenance-frontend:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8s-maintenance-frontend
+  namespace: k8s-maintenance
+spec:
+  selector:
+    app: k8s-maintenance-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+# Ingress (Optional - adjust for your ingress controller)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: k8s-maintenance-ingress
+  namespace: k8s-maintenance
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - k8s-maintenance.yourdomain.com
+      secretName: k8s-maintenance-tls
+  rules:
+    - host: k8s-maintenance.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: k8s-maintenance-frontend
+                port:
+                  number: 80

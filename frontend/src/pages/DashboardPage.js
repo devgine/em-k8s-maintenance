@@ -2,87 +2,104 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
-import { Plus, FolderOpen, Users, SignOut, ShieldCheck } from '@phosphor-icons/react';
+import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server } from 'lucide-react';
+import { ApplicationDialog } from '../components/ApplicationDialog';
+import { ApplicationUpdateDialog } from '../components/ApplicationUpdateDialog';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
-  const [spaces, setSpaces] = useState([]);
+  const { user, logout, isAdmin, isUser } = useAuth();
+  const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newSpace, setNewSpace] = useState({ name: '', description: '' });
-  const [creating, setCreating] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [selectedApp, setSelectedApp] = useState(null);
 
   useEffect(() => {
-    fetchSpaces();
+    fetchApplications();
   }, []);
 
-  const fetchSpaces = async () => {
+  const fetchApplications = async () => {
     try {
-      const { data } = await api.get('/spaces');
-      setSpaces(data);
+      const { data } = await api.get('/applications');
+      setApplications(data.applications);
     } catch (error) {
-      toast.error('Failed to load spaces');
+      toast.error('Failed to load applications');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateSpace = async (e) => {
-    e.preventDefault();
-    setCreating(true);
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const handleToggle = async (app) => {
     try {
-      const { data } = await api.post('/spaces', newSpace);
-      setSpaces([...spaces, data]);
-      setCreateDialogOpen(false);
-      setNewSpace({ name: '', description: '' });
-      toast.success('Space created successfully');
+      await api.post(`/applications/${app.id}/toggle?enabled=${!app.enabled}`);
+      toast.success(`Application ${!app.enabled ? 'enabled' : 'disabled'}`);
+      fetchApplications();
     } catch (error) {
-      toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to create space');
-    } finally {
-      setCreating(false);
+      toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to toggle application');
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+  const handleEdit = (app) => {
+    setSelectedApp(app);
+    setUpdateDialogOpen(true);
+  };
+
+  const handleDelete = async (app) => {
+    if (!window.confirm(`Are you sure you want to delete "${app.name}"?`)) return;
+    
+    try {
+      await api.delete(`/applications/${app.id}`);
+      toast.success('Application deleted successfully');
+      fetchApplications();
+    } catch (error) {
+      toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to delete application');
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-        <div className="text-[#F8FAFC]">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#09090B]">
+        <div className="text-zinc-50">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#050505]" data-testid="dashboard-page">
+    <div className="min-h-screen bg-[#09090B]" data-testid="dashboard-page">
       {/* Header */}
-      <div className="bg-[#050505]/70 backdrop-blur-xl border-b border-white/10 saturate-150 sticky top-0 z-40">
+      <div className="bg-[#09090B]/70 backdrop-blur-xl border-b border-white/10 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-md bg-gradient-to-r from-[#3B82F6] to-[#10B981] flex items-center justify-center">
-              <ShieldCheck size={24} weight="duotone" className="text-white" />
+            <div className="w-10 h-10 rounded-md bg-blue-600 flex items-center justify-center">
+              <Shield size={24} className="text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-[#F8FAFC]" style={{ fontFamily: "'Chivo', sans-serif" }}>VaultKeeper</h1>
+            <div>
+              <h1 className="text-xl font-bold text-zinc-50" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>K8s Maintenance</h1>
+              <p className="text-xs text-zinc-500 font-mono">{applications.length} applications</p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[#94A3B8] text-sm" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>{user?.email}</span>
+            <div className="text-right">
+              <div className="text-sm text-zinc-400">{user?.username || user?.email}</div>
+              <div className="text-xs text-zinc-500">
+                {user?.roles?.join(', ') || 'No roles'}
+              </div>
+            </div>
             <Button
               onClick={handleLogout}
               variant="outline"
-              className="border-[#27272A] text-[#F8FAFC] hover:bg-[#1A1A1D]"
+              className="border-[#27272A] text-zinc-50 hover:bg-[#18181B]"
               data-testid="logout-button"
             >
-              <SignOut size={16} className="mr-2" />
+              <LogOut size={16} className="mr-2" />
               Logout
             </Button>
           </div>
@@ -90,97 +107,140 @@ export const DashboardPage = () => {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-12">
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-3xl font-bold text-[#F8FAFC] mb-2" style={{ fontFamily: "'Chivo', sans-serif" }}>Your Spaces</h2>
-            <p className="text-[#94A3B8]" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
-              Organize your credentials into secure spaces
-            </p>
+            <h2 className="text-2xl font-bold text-zinc-50 mb-1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>Applications</h2>
+            <p className="text-sm text-zinc-400">Manage Traefik middleware IP allowlists</p>
           </div>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-[#3B82F6] hover:bg-[#60A5FA] text-white" data-testid="create-space-button">
-                <Plus size={20} className="mr-2" weight="bold" />
-                Create Space
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-[#0F0F11] border-[#27272A] text-[#F8FAFC]">
-              <DialogHeader>
-                <DialogTitle className="text-[#F8FAFC]" style={{ fontFamily: "'Chivo', sans-serif" }}>Create New Space</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCreateSpace} className="space-y-4" data-testid="create-space-form">
-                <div className="space-y-2">
-                  <Label htmlFor="space-name" className="text-[#F8FAFC] text-xs tracking-[0.2em] uppercase font-bold">Space Name</Label>
-                  <Input
-                    id="space-name"
-                    placeholder="Personal, Work, etc."
-                    value={newSpace.name}
-                    onChange={(e) => setNewSpace({ ...newSpace, name: e.target.value })}
-                    className="bg-[#050505] border-[#27272A] text-[#F8FAFC]"
-                    data-testid="space-name-input"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="space-description" className="text-[#F8FAFC] text-xs tracking-[0.2em] uppercase font-bold">Description</Label>
-                  <Textarea
-                    id="space-description"
-                    placeholder="Optional description"
-                    value={newSpace.description}
-                    onChange={(e) => setNewSpace({ ...newSpace, description: e.target.value })}
-                    className="bg-[#050505] border-[#27272A] text-[#F8FAFC]"
-                    data-testid="space-description-input"
-                  />
-                </div>
-                <Button type="submit" className="w-full bg-[#3B82F6] hover:bg-[#60A5FA]" disabled={creating} data-testid="create-space-submit">
-                  {creating ? 'Creating...' : 'Create Space'}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          {isAdmin() && (
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              className="bg-blue-600 hover:bg-blue-500 text-white"
+              data-testid="create-app-button"
+            >
+              <Plus size={18} className="mr-2" />
+              Create Application
+            </Button>
+          )}
         </div>
 
-        {/* Spaces Grid */}
-        {spaces.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-32 h-32 mx-auto mb-6 opacity-50">
-              <img 
-                src="https://static.prod-images.emergentagent.com/jobs/1c84658e-2f93-4ed7-8258-1a5b6c6f3bd0/images/b44ad2c00b9b26c9a9710d5486a302f1df52397154d4457470e9ab85fa5421c1.png"
-                alt="Empty vault"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <h3 className="text-xl font-semibold text-[#F8FAFC] mb-2" style={{ fontFamily: "'Chivo', sans-serif" }}>No spaces yet</h3>
-            <p className="text-[#94A3B8] mb-6" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>Create your first space to start managing credentials</p>
+        {/* Applications Table */}
+        {applications.length === 0 ? (
+          <div className="text-center py-20 border border-[#27272A] rounded-md">
+            <Server size={48} className="mx-auto mb-4 text-zinc-600" />
+            <h3 className="text-lg font-semibold text-zinc-50 mb-2">No applications yet</h3>
+            <p className="text-zinc-400 mb-4">Create your first application to start managing middlewares</p>
+            {isAdmin() && (
+              <Button onClick={() => setCreateDialogOpen(true)} className="bg-blue-600 hover:bg-blue-500">
+                <Plus size={18} className="mr-2" />
+                Create Application
+              </Button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="spaces-grid">
-            {spaces.map((space) => (
-              <div
-                key={space.id || space._id || space.owner_id}
-                onClick={() => navigate(`/space/${space.id || space._id || space.owner_id}`)}
-                className="bg-[#0F0F11] border border-[#27272A] rounded-md p-6 cursor-pointer hover:-translate-y-[1px] hover:shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:border-[#3F3F46] transition-all duration-200"
-                data-testid={`space-card-${space.id || space._id || space.owner_id}`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 rounded-md bg-[#1A1A1D] border border-[#27272A] flex items-center justify-center">
-                    <FolderOpen size={24} weight="duotone" className="text-[#3B82F6]" />
-                  </div>
-                  <div className="flex items-center gap-1 text-[#94A3B8]">
-                    <Users size={16} />
-                    <span className="text-sm">{space.members?.length || 1}</span>
-                  </div>
-                </div>
-                <h3 className="text-xl font-semibold text-[#F8FAFC] mb-2" style={{ fontFamily: "'Chivo', sans-serif" }}>{space.name}</h3>
-                <p className="text-[#94A3B8] text-sm" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>
-                  {space.description || 'No description'}
-                </p>
-              </div>
-            ))}
+          <div className="border border-[#27272A] rounded-md overflow-hidden">
+            <table className="w-full" data-testid="applications-table">
+              <thead className="bg-[#121214]">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Namespace</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">IP Allowlist</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Created By</th>
+                  <th className="px-4 py-3 text-right text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#27272A]">
+                {applications.map((app) => (
+                  <tr key={app.id} className="hover:bg-zinc-900/50 transition-colors" data-testid={`app-row-${app.id}`}>
+                    <td className="px-4 py-3">
+                      {app.enabled ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <Power size={12} className="mr-1" />
+                          Enabled
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                          <PowerOff size={12} className="mr-1" />
+                          Disabled
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-zinc-50 font-mono">{app.name}</td>
+                    <td className="px-4 py-3 text-sm text-zinc-400 font-mono">{app.namespace}</td>
+                    <td className="px-4 py-3 text-sm text-zinc-400 font-mono">
+                      {app.ip_allowlist?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {app.ip_allowlist.slice(0, 2).map((ip, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-zinc-800 rounded text-xs">{ip}</span>
+                          ))}
+                          {app.ip_allowlist.length > 2 && (
+                            <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs">+{app.ip_allowlist.length - 2}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-600">No IPs</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-zinc-400">{app.created_by}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {isAdmin() && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-blue-400"
+                            onClick={() => handleToggle(app)}
+                            data-testid={`toggle-${app.id}`}
+                          >
+                            {app.enabled ? <PowerOff size={16} /> : <Power size={16} />}
+                          </Button>
+                        )}
+                        {(isAdmin() || isUser()) && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-blue-400"
+                            onClick={() => handleEdit(app)}
+                            data-testid={`edit-${app.id}`}
+                          >
+                            <Pencil size={16} />
+                          </Button>
+                        )}
+                        {isAdmin() && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400"
+                            onClick={() => handleDelete(app)}
+                            data-testid={`delete-${app.id}`}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
+      <ApplicationDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSaved={fetchApplications}
+      />
+
+      <ApplicationUpdateDialog
+        open={updateDialogOpen}
+        onOpenChange={setUpdateDialogOpen}
+        application={selectedApp}
+        onSaved={fetchApplications}
+      />
     </div>
   );
 };
