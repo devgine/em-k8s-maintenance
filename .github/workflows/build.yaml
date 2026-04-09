@@ -8,6 +8,8 @@ on:
       - Dockerfile
       - .docker/**
       - .github/workflows/build.yaml
+      - backend
+      - frontend
 
 permissions:
   contents: 'read'
