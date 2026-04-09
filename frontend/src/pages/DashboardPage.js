@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
-import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server } from 'lucide-react';
+import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck } from 'lucide-react';
 import { ApplicationDialog } from '../components/ApplicationDialog';
 import { ApplicationUpdateDialog } from '../components/ApplicationUpdateDialog';
+import { IPTemplatesDialog } from '../components/IPTemplatesDialog';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
@@ -15,6 +16,7 @@ export const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [templatesDialogOpen, setTemplatesDialogOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
 
   useEffect(() => {
@@ -113,16 +115,29 @@ export const DashboardPage = () => {
             <h2 className="text-2xl font-bold text-zinc-50 mb-1" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>Applications</h2>
             <p className="text-sm text-zinc-400">Manage Traefik middleware IP allowlists</p>
           </div>
-          {isAdmin() && (
-            <Button
-              onClick={() => setCreateDialogOpen(true)}
-              className="bg-blue-600 hover:bg-blue-500 text-white"
-              data-testid="create-app-button"
-            >
-              <Plus size={18} className="mr-2" />
-              Create Application
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {(isAdmin() || isUser()) && (
+              <Button
+                onClick={() => setTemplatesDialogOpen(true)}
+                variant="outline"
+                className="border-[#27272A] text-zinc-50 hover:bg-[#18181B]"
+                data-testid="ip-templates-button"
+              >
+                <BookmarkCheck size={18} className="mr-2" />
+                IP Templates
+              </Button>
+            )}
+            {isAdmin() && (
+              <Button
+                onClick={() => setCreateDialogOpen(true)}
+                className="bg-blue-600 hover:bg-blue-500 text-white"
+                data-testid="create-app-button"
+              >
+                <Plus size={18} className="mr-2" />
+                Create Application
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Applications Table */}
@@ -240,6 +255,11 @@ export const DashboardPage = () => {
         onOpenChange={setUpdateDialogOpen}
         application={selectedApp}
         onSaved={fetchApplications}
+      />
+
+      <IPTemplatesDialog
+        open={templatesDialogOpen}
+        onOpenChange={setTemplatesDialogOpen}
       />
     </div>
   );
