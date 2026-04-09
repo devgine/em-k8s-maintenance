@@ -38,7 +38,7 @@ jobs:
         uses: 'depot/setup-action@v1'
 
       - name: Build and Push Backend Package
-        uses: 'depot/build-push-action@v1'
+        uses: 'depot/build-push-action@v7'
         with:
           project: ${{ secrets.DEPOT_PROJECT_ID }}
           token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
@@ -48,7 +48,8 @@ jobs:
           tags: |
             ghcr.io/devgine/k8s-maintenance-backend:latest
           context: .
-          file: ./backend/Dockerfile
+          target: backend
+          file: ./Dockerfile
           build-args: |
             VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ env.build_date }}
@@ -66,7 +67,8 @@ jobs:
           tags: |
             ghcr.io/devgine/k8s-maintenance-frontend:latest
           context: .
-          file: ./frontend/Dockerfile
+          target: frontend
+          file: ./Dockerfile
           build-args: |
             VCS_REF=${{ github.sha }}
             BUILD_DATE=${{ env.build_date }}
