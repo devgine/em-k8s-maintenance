@@ -11,11 +11,17 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const { login, user } = useAuth();
   const [token, setToken] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [activeTab, setActiveTab] = useState('keycloak');
+  const [loading, setLoading] = useState(false);
 
   const keycloakUrl = process.env.REACT_APP_KEYCLOAK_URL;
   const keycloakRealm = process.env.REACT_APP_KEYCLOAK_REALM;
   const keycloakClientId = process.env.REACT_APP_KEYCLOAK_CLIENT_ID;
   const redirectUri = window.location.origin + '/login';
+
+  const API_URL = process.env.REACT_APP_BACKEND_URL;
 
   useEffect(() => {
     if (user) {
@@ -50,6 +56,32 @@ export const LoginPage = () => {
     }
   };
 
+  const handleLocalLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/local-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Login failed');
+      }
+
+      const data = await response.json();
+      login(data.access_token);
+      toast.success('Logged in successfully');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.message || 'Invalid username or password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div 
       className="min-h-screen flex items-center justify-center relative overflow-hidden"
@@ -78,57 +110,143 @@ export const LoginPage = () => {
         </div>
 
         <div className="bg-[#121214] border border-[#27272A] rounded-md p-8">
+          <div className="mb-6">
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => setActiveTab('keycloak')}
+                className={`flex-1 py-2 px-4 rounded text-sm font-medium transition-colors ${
+                  activeTab === 'keycloak'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-[#09090B] text-zinc-400 hover:text-zinc-200'
+                }`}
+                data-testid="keycloak-tab"
+              >
+                Keycloak SSO
+              </button>
+              <button
+                onClick={() => setActiveTab('local')}
+                className={`flex-1 py-2 px-4 rounded text-sm font-medium transition-colors ${
+                  activeTab === 'local'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-[#09090B] text-zinc-400 hover:text-zinc-200'
+                }`}
+                data-testid="local-tab"
+              >
+                Super Admin
+              </button>
+              <button
+                onClick={() => setActiveTab('token')}
+                className={`flex-1 py-2 px-4 rounded text-sm font-medium transition-colors ${
+                  activeTab === 'token'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-[#09090B] text-zinc-400 hover:text-zinc-200'
+                }`}
+                data-testid="token-tab"
+              >
+                Token
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-6">
             {/* Keycloak SSO */}
-            <div>
-              <Button
-                onClick={handleLoginWithKeycloak}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium"
-                data-testid="keycloak-login-button"
-              >
-                <Shield size={18} className="mr-2" />
-                Login with Keycloak
-              </Button>
-            </div>
+            {activeTab === 'keycloak' && (
+              <div>
+                <Button
+                  onClick={handleLoginWithKeycloak}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium"
+                  data-testid="keycloak-login-button"
+                >
+                  <Shield size={18} className="mr-2" />
+                  Login with Keycloak
+                </Button>
+                <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md mt-4">
+                  <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-zinc-400">
+                    Use your organization Keycloak account to login.
+                  </p>
+                </div>
+              </div>
+            )}
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-[#27272A]" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-[#121214] px-2 text-zinc-500">Or use token</span>
-              </div>
-            </div>
+            {/* Local Super Admin Login */}
+            {activeTab === 'local' && (
+              <form onSubmit={handleLocalLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username" className="text-zinc-50 text-xs tracking-[0.2em] uppercase font-bold">Username</Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="superadmin"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="bg-[#09090B] border-[#27272A] text-zinc-50"
+                    data-testid="username-input"
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-zinc-50 text-xs tracking-[0.2em] uppercase font-bold">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-[#09090B] border-[#27272A] text-zinc-50"
+                    data-testid="password-input"
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium"
+                  disabled={loading}
+                  data-testid="local-login-button"
+                >
+                  {loading ? 'Logging in...' : 'Login as Super Admin'}
+                </Button>
+                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-md">
+                  <Info size={16} className="text-amber-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-zinc-400">
+                    Super admin has full access to all resources. Credentials are stored locally in MongoDB.
+                  </p>
+                </div>
+              </form>
+            )}
 
             {/* Manual Token Login */}
-            <form onSubmit={handleTokenLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="token" className="text-zinc-50 text-xs tracking-[0.2em] uppercase font-bold">Access Token</Label>
-                <Input
-                  id="token"
-                  type="password"
-                  placeholder="Paste your JWT token"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  className="bg-[#09090B] border-[#27272A] text-zinc-50 font-mono text-sm"
-                  data-testid="token-input"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium"
-                data-testid="token-login-button"
-              >
-                Login with Token
-              </Button>
-            </form>
-
-            <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
-              <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-zinc-400">
-                Get your access token from Keycloak admin console or use the SSO button above.
-              </p>
-            </div>
+            {activeTab === 'token' && (
+              <form onSubmit={handleTokenLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="token" className="text-zinc-50 text-xs tracking-[0.2em] uppercase font-bold">Access Token</Label>
+                  <Input
+                    id="token"
+                    type="password"
+                    placeholder="Paste your JWT token"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    className="bg-[#09090B] border-[#27272A] text-zinc-50 font-mono text-sm"
+                    data-testid="token-input"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium"
+                  data-testid="token-login-button"
+                >
+                  Login with Token
+                </Button>
+                <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                  <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-zinc-400">
+                    Get your access token from Keycloak admin console.
+                  </p>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       </div>
