@@ -1,0 +1,74 @@
+name: "Build"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - Dockerfile
+      - .docker/**
+      - .github/workflows/build.yaml
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+  packages: write
+
+jobs:
+  packaging:
+    runs-on: ubuntu-latest
+    name: "Maintenance package"
+    steps:
+      - name: Checkout
+        uses: "actions/checkout@v3"
+
+      - name: Login to GitHub Container Registry
+        uses: 'docker/login-action@v1'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_REPOSITORY_TOKEN }}
+
+      - name: Process builder
+        shell: bash
+        run: |
+          echo "build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> $GITHUB_ENV
+
+      - name: Set up Depot CLI
+        uses: 'depot/setup-action@v1'
+
+      - name: Build and Push Backend Package
+        uses: 'depot/build-push-action@v1'
+        with:
+          project: ${{ secrets.DEPOT_PROJECT_ID }}
+          token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/devgine/k8s-maintenance-backend:latest
+          context: .
+          file: ./backend/Dockerfile
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ env.build_date }}
+            BUILD_VERSION=latest
+            IMAGE_TAG=ghcr.io/devgine/k8s-maintenance-backend:latest
+
+      - name: Build and Push Frontend Package
+        uses: 'depot/build-push-action@v1'
+        with:
+          project: ${{ secrets.DEPOT_PROJECT_ID }}
+          token: ${{ secrets.DEPOT_PROJECT_TOKEN }}
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ghcr.io/devgine/k8s-maintenance-frontend:latest
+          context: .
+          file: ./frontend/Dockerfile
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            BUILD_DATE=${{ env.build_date }}
+            BUILD_VERSION=latest
+            IMAGE_TAG=ghcr.io/devgine/k8s-maintenance-frontend:latest
