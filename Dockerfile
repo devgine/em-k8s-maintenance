@@ -22,6 +22,9 @@ FROM node:24-alpine AS build
 
 WORKDIR /app
 
+ARG API_URL='https://maintenance.k3s.localhost'
+ENV API_URL=$API_URL
+
 # Install dependencies
 COPY ./frontend/package.json ./frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile
