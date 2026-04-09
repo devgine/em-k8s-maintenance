@@ -64,6 +64,19 @@ class LocalLoginRequest(BaseModel):
     username: str
     password: str
 
+class IPTemplateCreate(BaseModel):
+    name: str
+    value: str
+    description: Optional[str] = ""
+    
+    @field_validator('value')
+    def validate_ip_or_range(cls, v):
+        try:
+            ipaddress.ip_network(v, strict=False)
+            return v
+        except ValueError:
+            raise ValueError(f"Invalid IP address or range: {v}")
+
 class IPAllowlistItem(BaseModel):
     value: str
     
@@ -354,6 +367,52 @@ async def list_namespaces(user: Dict = Depends(require_role(["admin", "user", "r
     namespaces = await get_k8s_namespaces()
     return {"namespaces": namespaces}
 
+# IP Templates Routes
+@api_router.get("/ip-templates")
+async def list_ip_templates(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
+    """List all saved IP templates"""
+    templates = await db.ip_templates.find({}).to_list(1000)
+    for template in templates:
+        template["id"] = str(template.pop("_id"))
+    return {"templates": templates}
+
+@api_router.post("/ip-templates")
+async def create_ip_template(
+    template: IPTemplateCreate,
+    user: Dict = Depends(require_role(["admin", "user"]))
+):
+    """Create a new IP template"""
+    # Check if name already exists
+    existing = await db.ip_templates.find_one({"name": template.name})
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Template with name '{template.name}' already exists")
+    
+    template_doc = {
+        "name": template.name,
+        "value": template.value,
+        "description": template.description,
+        "created_by": user.get("username"),
+        "created_at": datetime.now(timezone.utc)
+    }
+    result = await db.ip_templates.insert_one(template_doc)
+    template_doc["id"] = str(result.inserted_id)
+    template_doc.pop("_id", None)
+    return template_doc
+
+@api_router.delete("/ip-templates/{template_id}")
+async def delete_ip_template(
+    template_id: str,
+    user: Dict = Depends(require_role(["admin", "user"]))
+):
+    """Delete an IP template"""
+    try:
+        result = await db.ip_templates.delete_one({"_id": ObjectId(template_id)})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Template not found")
+        return {"message": "Template deleted successfully"}
+    except:
+        raise HTTPException(status_code=404, detail="Template not found")
+
 @api_router.get("/applications")
 async def list_applications(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
     apps = await db.applications.find({}).to_list(1000)
@@ -512,6 +571,7 @@ async def startup_event():
     # Create indexes
     await db.applications.create_index([("name", 1), ("namespace", 1)], unique=True)
     await db.super_admins.create_index("username", unique=True)
+    await db.ip_templates.create_index("name", unique=True)
     
     # Seed super admin
     if SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD:
