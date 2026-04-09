@@ -4,11 +4,11 @@ FROM python:3.11-slim AS backend
 WORKDIR /app
 
 # Install dependencies
-COPY requirements.txt .
+COPY ./backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY . .
+COPY ./backend .
 
 # Expose port
 EXPOSE 8001
@@ -23,11 +23,11 @@ FROM node:18-alpine AS build
 WORKDIR /app
 
 # Install dependencies
-COPY package.json yarn.lock ./
+COPY ./frontend/package.json ./frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile
 
 # Copy source and build
-COPY . .
+COPY ./frontend .
 RUN yarn build
 
 # Production image
