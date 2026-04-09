@@ -12,3 +12,4 @@ ipaddress>=1.0.23
 validators>=0.22.0
 python-keycloak>=3.9.1
 requests>=2.31.0
+flask-bcrypt==1.0.1
