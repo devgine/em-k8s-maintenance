@@ -1,0 +1,46 @@
+---
+services:
+  mongodb:
+    image: mongo:6
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_AUTH_DATABASE=vaultkeeper
+    depends_on:
+      - mongodb
+
+  backend:
+    build:
+      context: .
+      target: backend
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend:/app
+    environment:
+#      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=maintenance
+    depends_on:
+      - mongodb
+
+  frontend:
+    build:
+      context: .
+      target: frontend_dev
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

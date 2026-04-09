@@ -18,7 +18,7 @@ CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001"]
 
 
 # Dockerfile for Frontend
-FROM node:18-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
@@ -29,6 +29,7 @@ RUN yarn install --frozen-lockfile
 # Copy source and build
 COPY ./frontend .
 RUN yarn build
+
 
 # Production image
 FROM nginx:alpine AS frontend
