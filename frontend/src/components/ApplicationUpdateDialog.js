@@ -3,8 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Plus, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Plus, X, BookmarkCheck, Pencil } from 'lucide-react';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
@@ -14,11 +14,18 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [inputMethod, setInputMethod] = useState('manual'); // 'manual' or 'template'
+  const [inputMethod, setInputMethod] = useState('manual');
 
   useEffect(() => {
     if (application) {
-      setIpAllowlist(application.ip_allowlist || []);
+      // Normalize ip_allowlist: support both old string[] and new object[] formats
+      const normalized = (application.ip_allowlist || []).map(entry => {
+        if (typeof entry === 'string') {
+          return { type: 'manual', value: entry };
+        }
+        return entry;
+      });
+      setIpAllowlist(normalized);
     }
   }, [application]);
 
@@ -38,20 +45,17 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
   };
 
   const validateIp = (ip) => {
-    // Basic IP/CIDR validation
     const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
     if (!ipRegex.test(ip)) return false;
     
     const parts = ip.split('/');
     const ipParts = parts[0].split('.');
     
-    // Validate each octet
     for (const part of ipParts) {
       const num = parseInt(part);
       if (num < 0 || num > 255) return false;
     }
     
-    // Validate CIDR if present
     if (parts.length === 2) {
       const cidr = parseInt(parts[1]);
       if (cidr < 0 || cidr > 32) return false;
@@ -61,8 +65,6 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
   };
 
   const handleAddIp = () => {
-    let ipToAdd = '';
-    
     if (inputMethod === 'manual') {
       if (!newIp.trim()) {
         toast.error('Please enter an IP address');
@@ -74,7 +76,15 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
         return;
       }
       
-      ipToAdd = newIp.trim();
+      const ipToAdd = newIp.trim();
+      
+      if (ipAllowlist.some(e => e.value === ipToAdd)) {
+        toast.error('IP already in list');
+        return;
+      }
+      
+      setIpAllowlist([...ipAllowlist, { type: 'manual', value: ipToAdd }]);
+      setNewIp('');
     } else {
       if (!selectedTemplate) {
         toast.error('Please select a template');
@@ -87,17 +97,20 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
         return;
       }
       
-      ipToAdd = template.value;
+      // Check if same template is already linked
+      if (ipAllowlist.some(e => e.template_id === template.id)) {
+        toast.error('This template is already in the list');
+        return;
+      }
+      
+      setIpAllowlist([...ipAllowlist, {
+        type: 'template',
+        value: template.value,
+        template_id: template.id,
+        template_name: template.name
+      }]);
+      setSelectedTemplate('');
     }
-    
-    if (ipAllowlist.includes(ipToAdd)) {
-      toast.error('IP already in list');
-      return;
-    }
-    
-    setIpAllowlist([...ipAllowlist, ipToAdd]);
-    setNewIp('');
-    setSelectedTemplate('');
   };
 
   const handleRemoveIp = (index) => {
@@ -141,25 +154,27 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
               <button
                 type="button"
                 onClick={() => setInputMethod('manual')}
-                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                   inputMethod === 'manual'
                     ? 'bg-blue-600 text-white'
                     : 'bg-[#09090B] text-zinc-400 hover:text-zinc-200 border border-[#27272A]'
                 }`}
                 data-testid="manual-input-toggle"
               >
+                <Pencil size={14} />
                 Manual Entry
               </button>
               <button
                 type="button"
                 onClick={() => setInputMethod('template')}
-                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors ${
+                className={`flex-1 py-2 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                   inputMethod === 'template'
                     ? 'bg-blue-600 text-white'
                     : 'bg-[#09090B] text-zinc-400 hover:text-zinc-200 border border-[#27272A]'
                 }`}
                 data-testid="template-input-toggle"
               >
+                <BookmarkCheck size={14} />
                 From Template
               </button>
             </div>
@@ -187,10 +202,10 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
                       </div>
                     ) : (
                       templates.map((template) => (
-                        <SelectItem key={template.id} value={template.id} className="font-mono">
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{template.name}</span>
-                            <span className="text-xs text-zinc-400">{template.value}</span>
+                        <SelectItem key={template.id} value={template.id}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{template.name}</span>
+                            <span className="text-xs text-zinc-400 font-mono">{template.value}</span>
                           </div>
                         </SelectItem>
                       ))
@@ -210,21 +225,40 @@ export const ApplicationUpdateDialog = ({ open, onOpenChange, application, onSav
             <p className="text-xs text-zinc-500">
               {inputMethod === 'manual' 
                 ? 'Enter IP address (e.g., 192.168.1.1) or CIDR range (e.g., 10.0.0.0/24)'
-                : 'Select from your saved IP templates'
+                : 'Select from your saved IP templates. Updating a template later will auto-update this app.'
               }
             </p>
 
             {/* IP List */}
             {ipAllowlist.length > 0 ? (
               <div className="space-y-2 max-h-64 overflow-y-auto border border-[#27272A] rounded-md p-3">
-                {ipAllowlist.map((ip, index) => (
-                  <div key={index} className="flex items-center justify-between bg-[#09090B] border border-[#27272A] rounded px-3 py-2" data-testid={`ip-item-${index}`}>
-                    <span className="text-sm font-mono text-zinc-50">{ip}</span>
+                {ipAllowlist.map((entry, index) => (
+                  <div
+                    key={index}
+                    className={`flex items-center justify-between rounded px-3 py-2 ${
+                      entry.type === 'template'
+                        ? 'bg-blue-500/5 border border-blue-500/20'
+                        : 'bg-[#09090B] border border-[#27272A]'
+                    }`}
+                    data-testid={`ip-item-${index}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {entry.type === 'template' ? (
+                        <>
+                          <BookmarkCheck size={14} className="text-blue-400 flex-shrink-0" />
+                          <span className="text-sm font-medium text-blue-400 truncate">{entry.template_name}</span>
+                          <span className="text-xs text-zinc-500">:</span>
+                          <span className="text-sm font-mono text-zinc-50">{entry.value}</span>
+                        </>
+                      ) : (
+                        <span className="text-sm font-mono text-zinc-50">{entry.value}</span>
+                      )}
+                    </div>
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-6 w-6 p-0 text-zinc-400 hover:text-red-400"
+                      className="h-6 w-6 p-0 text-zinc-400 hover:text-red-400 flex-shrink-0"
                       onClick={() => handleRemoveIp(index)}
                       data-testid={`remove-ip-${index}`}
                     >

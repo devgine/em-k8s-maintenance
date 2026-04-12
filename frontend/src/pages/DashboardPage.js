@@ -187,11 +187,20 @@ export const DashboardPage = () => {
                     <td className="px-4 py-3 text-sm text-zinc-400 font-mono">
                       {app.ip_allowlist?.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
-                          {app.ip_allowlist.slice(0, 2).map((ip, idx) => (
-                            <span key={idx} className="px-2 py-0.5 bg-zinc-800 rounded text-xs">{ip}</span>
+                          {app.ip_allowlist.slice(0, 3).map((entry, idx) => (
+                            <span key={idx} className={`px-2 py-0.5 rounded text-xs ${
+                              entry.type === 'template'
+                                ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                                : 'bg-zinc-800 text-zinc-300'
+                            }`}>
+                              {entry.type === 'template' && entry.template_name
+                                ? `${entry.template_name}: ${entry.value}`
+                                : entry.value || entry
+                              }
+                            </span>
                           ))}
-                          {app.ip_allowlist.length > 2 && (
-                            <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs">+{app.ip_allowlist.length - 2}</span>
+                          {app.ip_allowlist.length > 3 && (
+                            <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs">+{app.ip_allowlist.length - 3}</span>
                           )}
                         </div>
                       ) : (

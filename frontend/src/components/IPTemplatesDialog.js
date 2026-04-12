@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Plus, X, BookmarkCheck } from 'lucide-react';
+import { Plus, X, BookmarkCheck, Pencil, Check } from 'lucide-react';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
@@ -14,6 +14,9 @@ export const IPTemplatesDialog = ({ open, onOpenChange }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ name: '', value: '', description: '' });
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', value: '', description: '' });
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -75,12 +78,52 @@ export const IPTemplatesDialog = ({ open, onOpenChange }) => {
     }
   };
 
+  const handleStartEdit = (template) => {
+    setEditingId(template.id);
+    setEditForm({
+      name: template.name,
+      value: template.value,
+      description: template.description || ''
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ name: '', value: '', description: '' });
+  };
+
+  const handleSaveEdit = async (templateId) => {
+    if (editForm.value && !validateIp(editForm.value)) {
+      toast.error('Invalid IP address or CIDR range');
+      return;
+    }
+    
+    setUpdating(true);
+    try {
+      const { data } = await api.put(`/ip-templates/${templateId}`, editForm);
+      const affected = data.affected_apps || [];
+      
+      if (affected.length > 0) {
+        toast.success(`Template updated. ${affected.length} application(s) updated: ${affected.join(', ')}`);
+      } else {
+        toast.success('Template updated successfully');
+      }
+      
+      setEditingId(null);
+      fetchTemplates();
+    } catch (error) {
+      toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to update template');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleDeleteTemplate = async (templateId) => {
-    if (!window.confirm('Delete this IP template?')) return;
+    if (!window.confirm('Delete this IP template? Linked entries in applications will become manual entries.')) return;
     
     try {
-      await api.delete(`/ip-templates/${templateId}`);
-      toast.success('Template deleted successfully');
+      const { data } = await api.delete(`/ip-templates/${templateId}`);
+      toast.success(data.message || 'Template deleted successfully');
       fetchTemplates();
     } catch (error) {
       toast.error('Failed to delete template');
@@ -89,13 +132,13 @@ export const IPTemplatesDialog = ({ open, onOpenChange }) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#121214] border-[#27272A] text-zinc-50 max-w-2xl" data-testid="ip-templates-dialog">
+      <DialogContent className="bg-[#121214] border-[#27272A] text-zinc-50 max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="ip-templates-dialog">
         <DialogHeader>
           <DialogTitle className="text-zinc-50 flex items-center gap-2" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>
             <BookmarkCheck size={24} className="text-blue-400" />
             Saved IP Templates
           </DialogTitle>
-          <p className="text-sm text-zinc-400">Reusable IP addresses and CIDR ranges</p>
+          <p className="text-sm text-zinc-400">Reusable IP addresses and CIDR ranges. Editing a template updates all linked applications.</p>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -180,32 +223,98 @@ export const IPTemplatesDialog = ({ open, onOpenChange }) => {
                 {templates.map((template) => (
                   <div
                     key={template.id}
-                    className="flex items-start justify-between bg-[#09090B] border border-[#27272A] rounded-md p-3 hover:border-[#3F3F46] transition-colors"
+                    className="bg-[#09090B] border border-[#27272A] rounded-md p-3 hover:border-[#3F3F46] transition-colors"
                     data-testid={`template-${template.id}`}
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h5 className="font-semibold text-zinc-50">{template.name}</h5>
-                        <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-xs font-mono text-blue-400">
-                          {template.value}
-                        </span>
+                    {editingId === template.id ? (
+                      /* Edit Mode */
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-zinc-400 text-xs uppercase">Name</Label>
+                          <Input
+                            value={editForm.name}
+                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                            className="bg-[#121214] border-[#27272A] text-zinc-50 h-9"
+                            data-testid={`edit-name-${template.id}`}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-zinc-400 text-xs uppercase">IP / CIDR</Label>
+                          <Input
+                            value={editForm.value}
+                            onChange={(e) => setEditForm({ ...editForm, value: e.target.value })}
+                            className="bg-[#121214] border-[#27272A] text-zinc-50 font-mono h-9"
+                            data-testid={`edit-value-${template.id}`}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-zinc-400 text-xs uppercase">Description</Label>
+                          <Input
+                            value={editForm.description}
+                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                            className="bg-[#121214] border-[#27272A] text-zinc-50 h-9"
+                            data-testid={`edit-desc-${template.id}`}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelEdit}
+                            className="flex-1 border-[#27272A] text-zinc-50 hover:bg-[#18181B]"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleSaveEdit(template.id)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-500"
+                            disabled={updating}
+                            data-testid={`save-edit-${template.id}`}
+                          >
+                            {updating ? 'Saving...' : 'Save Changes'}
+                          </Button>
+                        </div>
                       </div>
-                      {template.description && (
-                        <p className="text-xs text-zinc-500">{template.description}</p>
-                      )}
-                      <p className="text-xs text-zinc-600 mt-1">
-                        Created by {template.created_by}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400"
-                      onClick={() => handleDeleteTemplate(template.id)}
-                      data-testid={`delete-template-${template.id}`}
-                    >
-                      <X size={16} />
-                    </Button>
+                    ) : (
+                      /* Display Mode */
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h5 className="font-semibold text-zinc-50">{template.name}</h5>
+                            <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-xs font-mono text-blue-400">
+                              {template.value}
+                            </span>
+                          </div>
+                          {template.description && (
+                            <p className="text-xs text-zinc-500">{template.description}</p>
+                          )}
+                          <p className="text-xs text-zinc-600 mt-1">
+                            Created by {template.created_by}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-blue-400"
+                            onClick={() => handleStartEdit(template)}
+                            data-testid={`edit-template-${template.id}`}
+                          >
+                            <Pencil size={16} />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-zinc-400 hover:text-red-400"
+                            onClick={() => handleDeleteTemplate(template.id)}
+                            data-testid={`delete-template-${template.id}`}
+                          >
+                            <X size={16} />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

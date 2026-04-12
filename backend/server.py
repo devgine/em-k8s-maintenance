@@ -77,6 +77,27 @@ class IPTemplateCreate(BaseModel):
         except ValueError:
             raise ValueError(f"Invalid IP address or range: {v}")
 
+class IPTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    value: Optional[str] = None
+    description: Optional[str] = None
+    
+    @field_validator('value')
+    def validate_ip_or_range(cls, v):
+        if v is None:
+            return v
+        try:
+            ipaddress.ip_network(v, strict=False)
+            return v
+        except ValueError:
+            raise ValueError(f"Invalid IP address or range: {v}")
+
+class IPAllowlistEntry(BaseModel):
+    type: str  # "manual" or "template"
+    value: str
+    template_id: Optional[str] = None
+    template_name: Optional[str] = None
+
 class IPAllowlistItem(BaseModel):
     value: str
     
@@ -100,22 +121,27 @@ class ApplicationCreate(BaseModel):
         return v
 
 class ApplicationUpdate(BaseModel):
-    ip_allowlist: List[str]
+    ip_allowlist: List[Dict[str, Any]]
     
     @field_validator('ip_allowlist')
-    def validate_ips(cls, v):
-        for ip in v:
-            try:
-                ipaddress.ip_network(ip, strict=False)
-            except ValueError:
-                raise ValueError(f"Invalid IP address or range: {ip}")
+    def validate_entries(cls, v):
+        for entry in v:
+            entry_type = entry.get("type")
+            if entry_type not in ("manual", "template"):
+                raise ValueError(f"Invalid entry type: {entry_type}")
+            ip_val = entry.get("value", "")
+            if ip_val:
+                try:
+                    ipaddress.ip_network(ip_val, strict=False)
+                except ValueError:
+                    raise ValueError(f"Invalid IP address or range: {ip_val}")
         return v
 
 class Application(BaseModel):
     id: str
     name: str
     namespace: str
-    ip_allowlist: List[str] = []
+    ip_allowlist: List[Dict[str, Any]] = []
     enabled: bool = True
     created_at: datetime
     updated_at: datetime
@@ -222,9 +248,40 @@ def require_role(required_roles: List[str]):
     return role_checker
 
 # Kubernetes operations
+def extract_ip_values(ip_allowlist: List[Dict[str, Any]]) -> List[str]:
+    """Extract raw IP values from the structured allowlist for K8s middleware."""
+    return [entry.get("value", "") for entry in ip_allowlist if entry.get("value")]
+
+async def resolve_template_values(ip_allowlist: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Resolve template entries to get current template values."""
+    resolved = []
+    for entry in ip_allowlist:
+        if entry.get("type") == "template" and entry.get("template_id"):
+            try:
+                template = await db.ip_templates.find_one({"_id": ObjectId(entry["template_id"])})
+                if template:
+                    resolved.append({
+                        "type": "template",
+                        "value": template["value"],
+                        "template_id": entry["template_id"],
+                        "template_name": template["name"]
+                    })
+                else:
+                    # Template deleted, keep as manual
+                    resolved.append({
+                        "type": "manual",
+                        "value": entry.get("value", "")
+                    })
+            except Exception:
+                resolved.append(entry)
+        else:
+            resolved.append(entry)
+    return resolved
+
 async def create_traefik_middleware(name: str, namespace: str, ip_allowlist: List[str]):
     if not k8s_custom_api:
-        raise HTTPException(status_code=500, detail="Kubernetes client not configured")
+        logger.warning(f"Kubernetes client not configured. Skipping middleware creation for {name}")
+        return
     
     # URL encode the name for middleware
     middleware_name = urllib.parse.quote(name, safe='')
@@ -266,7 +323,8 @@ async def create_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
 
 async def update_traefik_middleware(name: str, namespace: str, ip_allowlist: List[str]):
     if not k8s_custom_api:
-        raise HTTPException(status_code=500, detail="Kubernetes client not configured")
+        logger.warning(f"Kubernetes client not configured. Skipping middleware update for {name}")
+        return
     
     middleware_name = urllib.parse.quote(name, safe='')
     
@@ -298,7 +356,8 @@ async def update_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
 
 async def delete_traefik_middleware(name: str, namespace: str):
     if not k8s_custom_api:
-        raise HTTPException(status_code=500, detail="Kubernetes client not configured")
+        logger.warning(f"Kubernetes client not configured. Skipping middleware deletion for {name}")
+        return
     
     middleware_name = urllib.parse.quote(name, safe='')
     
@@ -404,20 +463,127 @@ async def delete_ip_template(
     template_id: str,
     user: Dict = Depends(require_role(["admin", "user"]))
 ):
-    """Delete an IP template"""
+    """Delete an IP template. Linked entries become manual."""
     try:
-        result = await db.ip_templates.delete_one({"_id": ObjectId(template_id)})
-        if result.deleted_count == 0:
+        template = await db.ip_templates.find_one({"_id": ObjectId(template_id)})
+        if not template:
             raise HTTPException(status_code=404, detail="Template not found")
-        return {"message": "Template deleted successfully"}
-    except:
+        
+        # Convert linked entries to manual in all applications
+        apps_using = await db.applications.find(
+            {"ip_allowlist.template_id": template_id}
+        ).to_list(1000)
+        
+        for app_doc in apps_using:
+            updated_list = []
+            for entry in app_doc.get("ip_allowlist", []):
+                if entry.get("template_id") == template_id:
+                    updated_list.append({"type": "manual", "value": entry.get("value", "")})
+                else:
+                    updated_list.append(entry)
+            await db.applications.update_one(
+                {"_id": app_doc["_id"]},
+                {"$set": {"ip_allowlist": updated_list, "updated_at": datetime.now(timezone.utc)}}
+            )
+        
+        await db.ip_templates.delete_one({"_id": ObjectId(template_id)})
+        return {"message": "Template deleted successfully", "affected_apps": len(apps_using)}
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(status_code=404, detail="Template not found")
+
+@api_router.put("/ip-templates/{template_id}")
+async def update_ip_template(
+    template_id: str,
+    template_update: IPTemplateUpdate,
+    user: Dict = Depends(require_role(["admin", "user"]))
+):
+    """Update an IP template and propagate changes to all linked applications."""
+    try:
+        template = await db.ip_templates.find_one({"_id": ObjectId(template_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Build update dict
+    update_fields = {}
+    if template_update.name is not None:
+        # Check name uniqueness
+        existing = await db.ip_templates.find_one({"name": template_update.name, "_id": {"$ne": ObjectId(template_id)}})
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Template name '{template_update.name}' already exists")
+        update_fields["name"] = template_update.name
+    if template_update.value is not None:
+        update_fields["value"] = template_update.value
+    if template_update.description is not None:
+        update_fields["description"] = template_update.description
+    
+    if not update_fields:
+        return {"message": "Nothing to update"}
+    
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+    
+    # Update the template
+    await db.ip_templates.update_one(
+        {"_id": ObjectId(template_id)},
+        {"$set": update_fields}
+    )
+    
+    new_name = update_fields.get("name", template["name"])
+    new_value = update_fields.get("value", template["value"])
+    
+    # Propagate changes to all applications using this template
+    apps_using = await db.applications.find(
+        {"ip_allowlist.template_id": template_id}
+    ).to_list(1000)
+    
+    affected_apps = []
+    for app_doc in apps_using:
+        updated_list = []
+        changed = False
+        for entry in app_doc.get("ip_allowlist", []):
+            if entry.get("template_id") == template_id:
+                updated_list.append({
+                    "type": "template",
+                    "value": new_value,
+                    "template_id": template_id,
+                    "template_name": new_name
+                })
+                changed = True
+            else:
+                updated_list.append(entry)
+        
+        if changed:
+            await db.applications.update_one(
+                {"_id": app_doc["_id"]},
+                {"$set": {"ip_allowlist": updated_list, "updated_at": datetime.now(timezone.utc)}}
+            )
+            
+            # Re-apply K8s middleware if app is enabled
+            if app_doc.get("enabled", True):
+                ip_values = extract_ip_values(updated_list)
+                try:
+                    await update_traefik_middleware(app_doc["name"], app_doc["namespace"], ip_values)
+                except Exception as e:
+                    logger.error(f"Failed to update K8s middleware for {app_doc['name']}: {e}")
+            
+            affected_apps.append(app_doc["name"])
+    
+    return {
+        "message": "Template updated successfully",
+        "affected_apps": affected_apps
+    }
 
 @api_router.get("/applications")
 async def list_applications(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
     apps = await db.applications.find({}).to_list(1000)
-    for app in apps:
-        app["id"] = str(app.pop("_id"))
+    for app_doc in apps:
+        app_doc["id"] = str(app_doc.pop("_id"))
+        # Resolve template values to ensure they're up to date
+        app_doc["ip_allowlist"] = await resolve_template_values(app_doc.get("ip_allowlist", []))
     return {"applications": apps}
 
 @api_router.post("/applications")
@@ -460,15 +626,16 @@ async def get_application(
     user: Dict = Depends(require_role(["admin", "user", "readonly"]))
 ):
     try:
-        app = await db.applications.find_one({"_id": ObjectId(app_id)})
+        app_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
     except:
         raise HTTPException(status_code=404, detail="Application not found")
     
-    if not app:
+    if not app_doc:
         raise HTTPException(status_code=404, detail="Application not found")
     
-    app["id"] = str(app.pop("_id"))
-    return app
+    app_doc["id"] = str(app_doc.pop("_id"))
+    app_doc["ip_allowlist"] = await resolve_template_values(app_doc.get("ip_allowlist", []))
+    return app_doc
 
 @api_router.put("/applications/{app_id}")
 async def update_application(
@@ -477,25 +644,28 @@ async def update_application(
     user: Dict = Depends(require_role(["admin", "user"]))
 ):
     try:
-        app = await db.applications.find_one({"_id": ObjectId(app_id)})
+        app_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
     except:
         raise HTTPException(status_code=404, detail="Application not found")
     
-    if not app:
+    if not app_doc:
         raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Resolve template values before storing
+    resolved_list = await resolve_template_values(app_update.ip_allowlist)
     
     # Update in MongoDB
     await db.applications.update_one(
         {"_id": ObjectId(app_id)},
         {"$set": {
-            "ip_allowlist": app_update.ip_allowlist,
+            "ip_allowlist": resolved_list,
             "updated_at": datetime.now(timezone.utc)
         }}
     )
     
     # Update Traefik Middleware in Kubernetes
-    ip_list = app_update.ip_allowlist if app.get("enabled", True) else ["0.0.0.0/0"]
-    await update_traefik_middleware(app["name"], app["namespace"], ip_list)
+    ip_values = extract_ip_values(resolved_list) if app_doc.get("enabled", True) else ["0.0.0.0/0"]
+    await update_traefik_middleware(app_doc["name"], app_doc["namespace"], ip_values)
     
     return {"message": "Application updated successfully"}
 
@@ -544,7 +714,7 @@ async def toggle_application(
     )
     
     # Update Traefik Middleware in Kubernetes
-    ip_list = app.get("ip_allowlist", []) if enabled else ["0.0.0.0/0"]
+    ip_list = extract_ip_values(app.get("ip_allowlist", [])) if enabled else ["0.0.0.0/0"]
     await update_traefik_middleware(app["name"], app["namespace"], ip_list)
     
     return {"message": f"Application {'enabled' if enabled else 'disabled'} successfully"}
