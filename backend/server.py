@@ -577,6 +577,53 @@ async def update_ip_template(
         "affected_apps": affected_apps
     }
 
+@api_router.get("/ip-templates/usage")
+async def get_template_usage(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
+    """Get usage count for each template (how many apps link to it)."""
+    templates = await db.ip_templates.find({}).to_list(1000)
+    usage = {}
+    for t in templates:
+        tid = str(t["_id"])
+        count = await db.applications.count_documents({"ip_allowlist.template_id": tid})
+        usage[tid] = count
+    return {"usage": usage}
+
+@api_router.get("/applications/{app_id}/yaml")
+async def get_application_yaml(
+    app_id: str,
+    user: Dict = Depends(require_role(["admin", "user", "readonly"]))
+):
+    """Generate the final Traefik Middleware YAML for an application."""
+    import yaml
+    try:
+        app_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    if not app_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    resolved = await resolve_template_values(app_doc.get("ip_allowlist", []))
+    ip_values = extract_ip_values(resolved) or ["0.0.0.0/0"]
+
+    middleware_name = urllib.parse.quote(app_doc["name"], safe='')
+    middleware = {
+        "apiVersion": "traefik.io/v1alpha1",
+        "kind": "Middleware",
+        "metadata": {
+            "name": middleware_name,
+            "namespace": app_doc["namespace"]
+        },
+        "spec": {
+            "ipAllowList": {
+                "sourceRange": ip_values
+            }
+        }
+    }
+
+    yaml_str = yaml.dump(middleware, default_flow_style=False, sort_keys=False)
+    return {"yaml": yaml_str, "name": app_doc["name"], "namespace": app_doc["namespace"]}
+
 @api_router.get("/applications")
 async def list_applications(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
     apps = await db.applications.find({}).to_list(1000)
