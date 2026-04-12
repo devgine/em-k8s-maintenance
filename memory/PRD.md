@@ -17,14 +17,19 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 ## Completed Features
 - Full CRUD for applications and IP templates
 - Keycloak + local super admin auth with role-based access
-- Relational linking: templates ↔ application allowlists
+- Relational linking: templates <-> application allowlists
 - Template update propagation to all linked applications
 - Dashboard auto-refresh on template edit/delete (bug fix 2026-04-12)
+- Template usage counter — shows how many apps link to each template (2026-04-12)
+- Dashboard shows ALL IPs per app, each on a separate line (2026-04-12)
+- YAML preview button — generates and displays final Traefik Middleware YAML per app (2026-04-12)
 
 ## Key Endpoints
 - `POST /api/auth/local-login` — local admin login
 - `GET/POST/PUT/DELETE /api/applications` — app CRUD
 - `GET/POST/PUT/DELETE /api/ip-templates` — template CRUD
+- `GET /api/ip-templates/usage` — template usage counts
+- `GET /api/applications/{id}/yaml` — Traefik middleware YAML preview
 - `POST /api/applications/{id}/toggle` — enable/disable
 - `GET /api/namespaces` — list K8s namespaces
 
