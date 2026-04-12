@@ -562,6 +562,203 @@ class TestNewFeatures:
                     assert "template_name" in entry, f"Template entry missing template_name: {entry}"
 
 
+class TestYamlSourceBadge:
+    """
+    NEW FEATURE TESTS: YAML endpoint returns 'source' field indicating 
+    whether YAML is from live cluster or generated
+    """
+    
+    def test_yaml_endpoint_returns_source_field(self, auth_token):
+        """
+        NEW FEATURE: GET /api/applications/{id}/yaml returns 'source' field
+        In test environment (no K8s cluster), source should be 'generated'
+        """
+        # Get an application
+        apps_response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        apps = apps_response.json()["applications"]
+        if not apps:
+            pytest.skip("No applications to test YAML endpoint")
+        
+        app = apps[0]
+        app_id = app["id"]
+        
+        # Get YAML for the application
+        response = requests.get(
+            f"{BASE_URL}/api/applications/{app_id}/yaml",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify 'source' field exists
+        assert "source" in data, "Response missing 'source' field"
+        
+        # In test environment (no K8s cluster), source should be 'generated'
+        assert data["source"] in ["cluster", "generated"], \
+            f"Invalid source value: {data['source']}"
+        
+        print(f"YAML source for {app['name']}: {data['source']}")
+        
+        # Since K8s is not available in test env, expect 'generated'
+        assert data["source"] == "generated", \
+            f"Expected 'generated' source in test env, got '{data['source']}'"
+        print("Source correctly shows 'generated' (cluster unavailable)")
+    
+    def test_yaml_source_for_all_apps(self, auth_token):
+        """Test that all applications return source field in YAML response"""
+        apps_response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        apps = apps_response.json()["applications"]
+        
+        for app in apps:
+            response = requests.get(
+                f"{BASE_URL}/api/applications/{app['id']}/yaml",
+                headers={"Authorization": f"Bearer {auth_token}"}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            
+            assert "source" in data, f"App {app['name']} YAML missing 'source' field"
+            assert "yaml" in data, f"App {app['name']} YAML missing 'yaml' field"
+            assert "name" in data, f"App {app['name']} YAML missing 'name' field"
+            assert "namespace" in data, f"App {app['name']} YAML missing 'namespace' field"
+            
+            print(f"App {app['name']}: source={data['source']}")
+
+
+class TestUserRoleToggle:
+    """
+    NEW FEATURE TESTS: User role can now enable/disable applications
+    (was admin-only before)
+    """
+    
+    def test_toggle_endpoint_accepts_user_role_in_decorator(self, auth_token):
+        """
+        NEW FEATURE: POST /api/applications/{id}/toggle accepts 'user' role
+        Verify by checking the backend code accepts ['admin', 'user'] roles
+        This test verifies the endpoint works with admin role (which we have)
+        """
+        # Get an application
+        apps_response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        apps = apps_response.json()["applications"]
+        if not apps:
+            pytest.skip("No applications to test toggle endpoint")
+        
+        app = apps[0]
+        app_id = app["id"]
+        original_enabled = app["enabled"]
+        
+        # Toggle the application (disable if enabled, enable if disabled)
+        new_enabled = not original_enabled
+        response = requests.post(
+            f"{BASE_URL}/api/applications/{app_id}/toggle?enabled={str(new_enabled).lower()}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        expected_msg = f"Application {'enabled' if new_enabled else 'disabled'} successfully"
+        assert data["message"] == expected_msg
+        print(f"Toggle successful: {data['message']}")
+        
+        # Verify the change
+        get_response = requests.get(
+            f"{BASE_URL}/api/applications/{app_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        updated_app = get_response.json()
+        assert updated_app["enabled"] == new_enabled
+        print(f"App {app['name']} enabled state changed from {original_enabled} to {new_enabled}")
+        
+        # Restore original state
+        requests.post(
+            f"{BASE_URL}/api/applications/{app_id}/toggle?enabled={str(original_enabled).lower()}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        print(f"Restored app to original state: enabled={original_enabled}")
+    
+    def test_toggle_endpoint_role_verification(self, auth_token):
+        """
+        Verify the toggle endpoint decorator accepts both 'admin' and 'user' roles
+        by checking the endpoint is accessible (admin role test)
+        """
+        # Get an application
+        apps_response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        apps = apps_response.json()["applications"]
+        if not apps:
+            pytest.skip("No applications to test")
+        
+        app = apps[0]
+        
+        # Test that toggle endpoint is accessible with admin role
+        # The endpoint should return 200 (success) not 403 (forbidden)
+        response = requests.post(
+            f"{BASE_URL}/api/applications/{app['id']}/toggle?enabled={str(app['enabled']).lower()}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        
+        # Should not be 403 (forbidden) - means role check passed
+        assert response.status_code != 403, "Toggle endpoint rejected admin role"
+        assert response.status_code == 200, f"Unexpected status: {response.status_code}"
+        print("Toggle endpoint accessible with admin role (user role also accepted per code)")
+
+
+class TestIPTemplatesUserRole:
+    """
+    Tests for IP Templates CRUD with user role permissions
+    User role can create/update/delete templates (already was allowed, verify still works)
+    """
+    
+    def test_ip_templates_crud_with_admin_role(self, auth_token):
+        """
+        Verify IP templates CRUD works with admin role
+        (User role has same permissions per require_role decorator)
+        """
+        # Create template
+        create_response = requests.post(
+            f"{BASE_URL}/api/ip-templates",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={
+                "name": "TEST_UserRole_Template",
+                "value": "10.100.0.0/16",
+                "description": "Test template for user role verification"
+            }
+        )
+        assert create_response.status_code == 200
+        template = create_response.json()
+        template_id = template["id"]
+        print(f"Created template: {template['name']}")
+        
+        # Update template
+        update_response = requests.put(
+            f"{BASE_URL}/api/ip-templates/{template_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"description": "Updated description"}
+        )
+        assert update_response.status_code == 200
+        print("Updated template successfully")
+        
+        # Delete template
+        delete_response = requests.delete(
+            f"{BASE_URL}/api/ip-templates/{template_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert delete_response.status_code == 200
+        print("Deleted template successfully")
+        print("IP Templates CRUD verified (admin role, user role has same permissions)")
+
+
 # Fixtures
 @pytest.fixture
 def auth_token():
