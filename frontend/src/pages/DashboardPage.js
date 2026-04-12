@@ -224,7 +224,7 @@ export const DashboardPage = () => {
                         >
                           <FileCode size={16} />
                         </Button>
-                        {isAdmin() && (
+                        {(isAdmin() || isUser()) && (
                           <Button
                             size="sm"
                             variant="ghost"
