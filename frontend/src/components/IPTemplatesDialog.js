@@ -17,6 +17,7 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', value: '', description: '' });
   const [updating, setUpdating] = useState(false);
+  const [usage, setUsage] = useState({});
 
   useEffect(() => {
     if (open) {
@@ -296,7 +297,7 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
                             <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-xs font-mono text-blue-400">
                               {template.value}
                             </span>
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                               (usage[template.id] || 0) > 0
                                 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
                                 : 'bg-zinc-800 text-zinc-500'
