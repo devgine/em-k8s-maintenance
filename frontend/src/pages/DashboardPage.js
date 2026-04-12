@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
-import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck } from 'lucide-react';
+import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck, FileCode } from 'lucide-react';
 import { ApplicationDialog } from '../components/ApplicationDialog';
 import { ApplicationUpdateDialog } from '../components/ApplicationUpdateDialog';
 import { IPTemplatesDialog } from '../components/IPTemplatesDialog';
+import { YamlPreviewDialog } from '../components/YamlPreviewDialog';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
@@ -17,6 +18,7 @@ export const DashboardPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [templatesDialogOpen, setTemplatesDialogOpen] = useState(false);
+  const [yamlDialogOpen, setYamlDialogOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
 
   useEffect(() => {
@@ -47,6 +49,11 @@ export const DashboardPage = () => {
     } catch (error) {
       toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to toggle application');
     }
+  };
+
+  const handleYaml = (app) => {
+    setSelectedApp(app);
+    setYamlDialogOpen(true);
   };
 
   const handleEdit = (app) => {
@@ -186,9 +193,9 @@ export const DashboardPage = () => {
                     <td className="px-4 py-3 text-sm text-zinc-400 font-mono">{app.namespace}</td>
                     <td className="px-4 py-3 text-sm text-zinc-400 font-mono">
                       {app.ip_allowlist?.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {app.ip_allowlist.slice(0, 3).map((entry, idx) => (
-                            <span key={idx} className={`px-2 py-0.5 rounded text-xs ${
+                        <div className="flex flex-col gap-1">
+                          {app.ip_allowlist.map((entry, idx) => (
+                            <span key={idx} className={`inline-flex items-center px-2 py-0.5 rounded text-xs w-fit ${
                               entry.type === 'template'
                                 ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
                                 : 'bg-zinc-800 text-zinc-300'
@@ -199,9 +206,6 @@ export const DashboardPage = () => {
                               }
                             </span>
                           ))}
-                          {app.ip_allowlist.length > 3 && (
-                            <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs">+{app.ip_allowlist.length - 3}</span>
-                          )}
                         </div>
                       ) : (
                         <span className="text-zinc-600">No IPs</span>
@@ -210,6 +214,16 @@ export const DashboardPage = () => {
                     <td className="px-4 py-3 text-sm text-zinc-400">{app.created_by}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-zinc-400 hover:text-amber-400"
+                          onClick={() => handleYaml(app)}
+                          title="View YAML"
+                          data-testid={`yaml-${app.id}`}
+                        >
+                          <FileCode size={16} />
+                        </Button>
                         {isAdmin() && (
                           <Button
                             size="sm"
@@ -270,6 +284,12 @@ export const DashboardPage = () => {
         open={templatesDialogOpen}
         onOpenChange={setTemplatesDialogOpen}
         onTemplatesChanged={fetchApplications}
+      />
+
+      <YamlPreviewDialog
+        open={yamlDialogOpen}
+        onOpenChange={setYamlDialogOpen}
+        application={selectedApp}
       />
     </div>
   );
