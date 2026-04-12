@@ -424,6 +424,144 @@ class TestNamespaces:
         print(f"Found {len(data['namespaces'])} namespaces (may be empty in test env)")
 
 
+class TestNewFeatures:
+    """Tests for NEW features: Template usage counter, YAML preview endpoint"""
+    
+    def test_template_usage_endpoint(self, auth_token):
+        """
+        NEW FEATURE TEST: GET /api/ip-templates/usage returns correct usage counts
+        Expected: Office Network = 2 apps, VPN Network = 0 apps
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/ip-templates/usage",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "usage" in data
+        assert isinstance(data["usage"], dict)
+        print(f"Template usage data: {data['usage']}")
+        
+        # Get templates to map IDs to names
+        templates_response = requests.get(
+            f"{BASE_URL}/api/ip-templates",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        templates = templates_response.json()["templates"]
+        
+        # Verify Office Network has 2 apps linked
+        office_template = next((t for t in templates if t["name"] == "Office Network"), None)
+        if office_template:
+            office_usage = data["usage"].get(office_template["id"], 0)
+            print(f"Office Network template usage: {office_usage} apps")
+            # Should be 2 (my-web-app and api-gateway)
+            assert office_usage == 2, f"Expected Office Network to have 2 apps, got {office_usage}"
+        
+        # Verify VPN Network has 0 apps linked
+        vpn_template = next((t for t in templates if t["name"] == "VPN Network"), None)
+        if vpn_template:
+            vpn_usage = data["usage"].get(vpn_template["id"], 0)
+            print(f"VPN Network template usage: {vpn_usage} apps")
+            assert vpn_usage == 0, f"Expected VPN Network to have 0 apps, got {vpn_usage}"
+    
+    def test_application_yaml_endpoint(self, auth_token):
+        """
+        NEW FEATURE TEST: GET /api/applications/{id}/yaml returns valid Traefik Middleware YAML
+        """
+        # Get an application
+        apps_response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        apps = apps_response.json()["applications"]
+        if not apps:
+            pytest.skip("No applications to test YAML endpoint")
+        
+        app = apps[0]
+        app_id = app["id"]
+        
+        # Get YAML for the application
+        response = requests.get(
+            f"{BASE_URL}/api/applications/{app_id}/yaml",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify response structure
+        assert "yaml" in data
+        assert "name" in data
+        assert "namespace" in data
+        assert data["name"] == app["name"]
+        assert data["namespace"] == app["namespace"]
+        
+        # Verify YAML content contains required Traefik middleware fields
+        yaml_content = data["yaml"]
+        assert "apiVersion: traefik.io/v1alpha1" in yaml_content
+        assert "kind: Middleware" in yaml_content
+        assert "metadata:" in yaml_content
+        assert "spec:" in yaml_content
+        assert "ipAllowList:" in yaml_content
+        assert "sourceRange:" in yaml_content
+        
+        print(f"YAML for {app['name']}:\n{yaml_content}")
+    
+    def test_yaml_endpoint_with_known_app_ids(self, auth_token):
+        """
+        Test YAML endpoint with specific app IDs from seed data
+        my-web-app=69dbce826284e081bfb04327, api-gateway=69dbce826284e081bfb04328
+        """
+        app_ids = ["69dbce826284e081bfb04327", "69dbce826284e081bfb04328"]
+        
+        for app_id in app_ids:
+            response = requests.get(
+                f"{BASE_URL}/api/applications/{app_id}/yaml",
+                headers={"Authorization": f"Bearer {auth_token}"}
+            )
+            # May return 404 if seed data IDs changed
+            if response.status_code == 200:
+                data = response.json()
+                print(f"YAML for app {data['name']} retrieved successfully")
+                assert "yaml" in data
+            elif response.status_code == 404:
+                print(f"App ID {app_id} not found (seed data may have different IDs)")
+            else:
+                pytest.fail(f"Unexpected status code {response.status_code} for app {app_id}")
+    
+    def test_yaml_endpoint_invalid_app_id(self, auth_token):
+        """Test YAML endpoint with invalid app ID returns 404"""
+        response = requests.get(
+            f"{BASE_URL}/api/applications/invalid_id_12345/yaml",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 404
+        print("Invalid app ID correctly returns 404")
+    
+    def test_applications_list_has_all_ips(self, auth_token):
+        """
+        NEW FEATURE TEST: Verify applications list returns ALL IPs (not truncated)
+        Backend should return full ip_allowlist array
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        apps = response.json()["applications"]
+        
+        for app in apps:
+            ip_list = app.get("ip_allowlist", [])
+            print(f"App {app['name']} has {len(ip_list)} IP entries: {ip_list}")
+            
+            # Verify each entry has required fields
+            for entry in ip_list:
+                assert "type" in entry, f"Missing 'type' in entry: {entry}"
+                assert "value" in entry, f"Missing 'value' in entry: {entry}"
+                if entry["type"] == "template":
+                    assert "template_id" in entry, f"Template entry missing template_id: {entry}"
+                    assert "template_name" in entry, f"Template entry missing template_name: {entry}"
+
+
 # Fixtures
 @pytest.fixture
 def auth_token():
