@@ -108,21 +108,20 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
       toast.error('Invalid IP address or CIDR range');
       return;
     }
-    
+
     setUpdating(true);
     try {
       const { data } = await api.put(`/ip-templates/${templateId}`, editForm);
       const affected = data.affected_apps || [];
-      
+
       if (affected.length > 0) {
         toast.success(`Template updated. ${affected.length} application(s) updated: ${affected.join(', ')}`);
       } else {
         toast.success('Template updated successfully');
       }
-      
+
       setEditingId(null);
       fetchTemplates();
-      if (onTemplatesChanged) onTemplatesChanged();
     } catch (error) {
       toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to update template');
     } finally {
