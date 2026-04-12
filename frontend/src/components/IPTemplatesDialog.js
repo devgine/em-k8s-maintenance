@@ -17,7 +17,6 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', value: '', description: '' });
   const [updating, setUpdating] = useState(false);
-  const [usage, setUsage] = useState({});
 
   useEffect(() => {
     if (open) {
@@ -108,21 +107,20 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
       toast.error('Invalid IP address or CIDR range');
       return;
     }
-    
+
     setUpdating(true);
     try {
       const { data } = await api.put(`/ip-templates/${templateId}`, editForm);
       const affected = data.affected_apps || [];
-      
+
       if (affected.length > 0) {
         toast.success(`Template updated. ${affected.length} application(s) updated: ${affected.join(', ')}`);
       } else {
         toast.success('Template updated successfully');
       }
-      
+
       setEditingId(null);
       fetchTemplates();
-      if (onTemplatesChanged) onTemplatesChanged();
     } catch (error) {
       toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to update template');
     } finally {
@@ -298,7 +296,7 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
                             <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-xs font-mono text-blue-400">
                               {template.value}
                             </span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                               (usage[template.id] || 0) > 0
                                 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
                                 : 'bg-zinc-800 text-zinc-500'
