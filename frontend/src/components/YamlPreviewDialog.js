@@ -9,7 +9,6 @@ export const YamlPreviewDialog = ({ open, onOpenChange, application }) => {
   const [yaml, setYaml] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [source, setSource] = useState('');
 
   React.useEffect(() => {
     if (open && application) {
@@ -22,7 +21,6 @@ export const YamlPreviewDialog = ({ open, onOpenChange, application }) => {
     try {
       const { data } = await api.get(`/applications/${application.id}/yaml`);
       setYaml(data.yaml);
-      setSource(data.source);
     } catch (error) {
       toast.error('Failed to generate YAML');
     } finally {
@@ -47,17 +45,8 @@ export const YamlPreviewDialog = ({ open, onOpenChange, application }) => {
             <FileCode size={22} className="text-amber-400" />
             Traefik Middleware YAML
           </DialogTitle>
-          <div className="text-sm text-zinc-400 font-mono flex items-center gap-2">
+          <div className="text-sm text-zinc-400 font-mono">
             {application.name} / {application.namespace}
-            {source && (
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                source === 'cluster'
-                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
-                  : 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
-              }`} data-testid="yaml-source-badge">
-                {source === 'cluster' ? 'Live from cluster' : 'Generated (cluster unavailable)'}
-              </span>
-            )}
           </div>
         </DialogHeader>
 

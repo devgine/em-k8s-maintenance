@@ -599,7 +599,7 @@ async def get_application_yaml(
     app_id: str,
     user: Dict = Depends(require_role(["admin", "user", "readonly"]))
 ):
-    """Get the real Traefik Middleware YAML from the cluster, or generate it if unavailable."""
+    """Generate the final Traefik Middleware YAML for an application."""
     import yaml
     try:
         app_doc = await db.applications.find_one({"_id": ObjectId(app_id)})
@@ -609,55 +609,26 @@ async def get_application_yaml(
     if not app_doc:
         raise HTTPException(status_code=404, detail="Application not found")
 
+    resolved = await resolve_template_values(app_doc.get("ip_allowlist", []))
+    ip_values = extract_ip_values(resolved) or ["0.0.0.0/0"]
+
     middleware_name = urllib.parse.quote(app_doc["name"], safe='')
-    namespace = app_doc["namespace"]
-    source = "cluster"
-
-    # Try fetching the real middleware from the K8s cluster
-    real_middleware = None
-    if k8s_custom_api:
-        try:
-            real_middleware = k8s_custom_api.get_namespaced_custom_object(
-                group="traefik.io",
-                version="v1alpha1",
-                namespace=namespace,
-                plural="middlewares",
-                name=middleware_name
-            )
-            # Strip managed fields / status for cleaner output
-            for key in ["managedFields", "resourceVersion", "uid", "generation", "creationTimestamp"]:
-                real_middleware.get("metadata", {}).pop(key, None)
-            real_middleware.get("metadata", {}).pop("annotations", None)
-        except Exception as e:
-            logger.warning(f"Could not fetch middleware from cluster for {middleware_name}: {e}")
-            real_middleware = None
-
-    if real_middleware:
-        yaml_str = yaml.dump(real_middleware, default_flow_style=False, sort_keys=False)
-    else:
-        # Generate expected YAML from DB data
-        source = "generated"
-        resolved = await resolve_template_values(app_doc.get("ip_allowlist", []))
-        ip_values = extract_ip_values(resolved) or ["0.0.0.0/0"]
-        middleware = {
-            "apiVersion": "traefik.io/v1alpha1",
-            "kind": "Middleware",
-            "metadata": {
-                "name": middleware_name,
-                "namespace": namespace
-            },
-            "spec": {
-                "ipStrategy": {
-                    "excludedIPs": os.environ.get('TRAEFIK_EXCLUDED_IPS', ""),
-                },
-                "ipAllowList": {
-                    "sourceRange": ip_values
-                }
+    middleware = {
+        "apiVersion": "traefik.io/v1alpha1",
+        "kind": "Middleware",
+        "metadata": {
+            "name": middleware_name,
+            "namespace": app_doc["namespace"]
+        },
+        "spec": {
+            "ipAllowList": {
+                "sourceRange": ip_values
             }
         }
-        yaml_str = yaml.dump(middleware, default_flow_style=False, sort_keys=False)
+    }
 
-    return {"yaml": yaml_str, "name": app_doc["name"], "namespace": namespace, "source": source}
+    yaml_str = yaml.dump(middleware, default_flow_style=False, sort_keys=False)
+    return {"yaml": yaml_str, "name": app_doc["name"], "namespace": app_doc["namespace"]}
 
 @api_router.get("/applications")
 async def list_applications(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
