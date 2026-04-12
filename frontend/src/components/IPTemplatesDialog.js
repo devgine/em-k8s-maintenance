@@ -8,7 +8,7 @@ import { Plus, X, BookmarkCheck, Pencil, Check } from 'lucide-react';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
-export const IPTemplatesDialog = ({ open, onOpenChange }) => {
+export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) => {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -111,6 +111,7 @@ export const IPTemplatesDialog = ({ open, onOpenChange }) => {
       
       setEditingId(null);
       fetchTemplates();
+      if (onTemplatesChanged) onTemplatesChanged();
     } catch (error) {
       toast.error(formatApiErrorDetail(error.response?.data?.detail) || 'Failed to update template');
     } finally {
@@ -125,6 +126,7 @@ export const IPTemplatesDialog = ({ open, onOpenChange }) => {
       const { data } = await api.delete(`/ip-templates/${templateId}`);
       toast.success(data.message || 'Template deleted successfully');
       fetchTemplates();
+      if (onTemplatesChanged) onTemplatesChanged();
     } catch (error) {
       toast.error('Failed to delete template');
     }

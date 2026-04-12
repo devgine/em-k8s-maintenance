@@ -269,6 +269,7 @@ export const DashboardPage = () => {
       <IPTemplatesDialog
         open={templatesDialogOpen}
         onOpenChange={setTemplatesDialogOpen}
+        onTemplatesChanged={fetchApplications}
       />
     </div>
   );
