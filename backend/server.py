@@ -28,7 +28,7 @@ mongo_url = os.environ['MONGO_URL']
 client_mongo = AsyncIOMotorClient(mongo_url)
 db = client_mongo[os.environ['DB_NAME']]
 
-excluded_ips = os.environ.get('TRAEFIK_EXCLUDED_IPS', [])
+excluded_ips = os.environ.get('TRAEFIK_EXCLUDED_IPS', "").split(',')
 
 # Kubernetes client
 try:
