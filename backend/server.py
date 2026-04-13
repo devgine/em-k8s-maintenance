@@ -28,6 +28,8 @@ mongo_url = os.environ['MONGO_URL']
 client_mongo = AsyncIOMotorClient(mongo_url)
 db = client_mongo[os.environ['DB_NAME']]
 
+excluded_ips = os.environ.get('TRAEFIK_EXCLUDED_IPS', "")
+
 # Kubernetes client
 try:
     if os.environ.get('IN_CLUSTER', 'false').lower() == 'true':
@@ -295,7 +297,7 @@ async def create_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
         },
         "spec": {
             "ipStrategy": {
-                "excludedIPs": os.environ.get('TRAEFIK_EXCLUDED_IPS', ""),
+                "excludedIPs": excluded_ips,
             },
             "ipAllowList": {
                 "sourceRange": ip_allowlist if ip_allowlist else ["0.0.0.0/0"]
@@ -340,7 +342,7 @@ async def update_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
         },
         "spec": {
             "ipStrategy": {
-                "excludedIPs": os.environ.get('TRAEFIK_EXCLUDED_IPS', ""),
+                "excludedIPs": excluded_ips,
             },
             "ipAllowList": {
                 "sourceRange": ip_allowlist if ip_allowlist else ["0.0.0.0/0"]
@@ -622,7 +624,7 @@ async def get_application_yaml(
         },
         "spec": {
             "ipStrategy": {
-                "excludedIPs": os.environ.get('TRAEFIK_EXCLUDED_IPS', ""),
+                "excludedIPs": excluded_ips,
             },
             "ipAllowList": {
                 "sourceRange": ip_values
