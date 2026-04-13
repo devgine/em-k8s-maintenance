@@ -714,6 +714,91 @@ class TestUserRoleToggle:
         print("Toggle endpoint accessible with admin role (user role also accepted per code)")
 
 
+class TestSyncStatus:
+    """
+    NEW FEATURE TESTS: Sync status endpoint to check if namespace/middleware exist in K8s cluster
+    GET /api/applications/sync-status returns sync status for all applications
+    """
+    
+    def test_sync_status_endpoint_exists(self, auth_token):
+        """
+        NEW FEATURE: GET /api/applications/sync-status endpoint exists and returns valid response
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/applications/sync-status",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify response structure
+        assert "available" in data, "Response missing 'available' field"
+        assert "status" in data, "Response missing 'status' field"
+        
+        print(f"Sync status response: available={data['available']}, status keys={list(data['status'].keys())}")
+    
+    def test_sync_status_returns_available_false_when_k8s_unavailable(self, auth_token):
+        """
+        NEW FEATURE: When K8s client is not configured, sync-status returns available=false
+        In test environment, K8s is not available, so expect available=false
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/applications/sync-status",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # In test environment (no K8s cluster), available should be false
+        assert data["available"] == False, \
+            f"Expected available=false in test env, got {data['available']}"
+        
+        # When unavailable, status should be empty dict
+        assert data["status"] == {}, \
+            f"Expected empty status when unavailable, got {data['status']}"
+        
+        print("Sync status correctly returns available=false when K8s unavailable")
+    
+    def test_sync_status_requires_authentication(self):
+        """
+        NEW FEATURE: Sync status endpoint requires authentication
+        """
+        response = requests.get(f"{BASE_URL}/api/applications/sync-status")
+        assert response.status_code in [401, 403], \
+            f"Expected 401/403 without auth, got {response.status_code}"
+        print("Sync status endpoint correctly requires authentication")
+    
+    def test_sync_status_response_structure_when_available(self, auth_token):
+        """
+        NEW FEATURE: Verify sync status response structure
+        When K8s is available, status dict should have app_id keys with sync info
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/applications/sync-status",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # If K8s were available, status would have structure like:
+        # { "app_id": { "namespace_exists": bool, "middleware_exists": bool, "synced": bool } }
+        # In test env, available=false so status is empty
+        
+        if data["available"]:
+            # This branch would run if K8s were available
+            for app_id, status in data["status"].items():
+                assert "namespace_exists" in status
+                assert "middleware_exists" in status
+                assert "synced" in status
+                # synced should be true only if both namespace and middleware exist
+                assert status["synced"] == (status["namespace_exists"] and status["middleware_exists"])
+        else:
+            # Test env - K8s unavailable
+            assert data["status"] == {}
+        
+        print(f"Sync status structure verified: available={data['available']}")
+
+
 class TestIPTemplatesUserRole:
     """
     Tests for IP Templates CRUD with user role permissions

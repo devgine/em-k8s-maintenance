@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
-import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck, FileCode } from 'lucide-react';
+import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck, FileCode, AlertTriangle, CheckCircle, CloudOff } from 'lucide-react';
 import { ApplicationDialog } from '../components/ApplicationDialog';
 import { ApplicationUpdateDialog } from '../components/ApplicationUpdateDialog';
 import { IPTemplatesDialog } from '../components/IPTemplatesDialog';
@@ -20,9 +20,12 @@ export const DashboardPage = () => {
   const [templatesDialogOpen, setTemplatesDialogOpen] = useState(false);
   const [yamlDialogOpen, setYamlDialogOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
+  const [syncStatus, setSyncStatus] = useState({});
+  const [syncAvailable, setSyncAvailable] = useState(null);
 
   useEffect(() => {
     fetchApplications();
+    fetchSyncStatus();
   }, []);
 
   const fetchApplications = async () => {
@@ -33,6 +36,16 @@ export const DashboardPage = () => {
       toast.error('Failed to load applications');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSyncStatus = async () => {
+    try {
+      const { data } = await api.get('/applications/sync-status');
+      setSyncAvailable(data.available);
+      setSyncStatus(data.status);
+    } catch (error) {
+      console.error('Failed to fetch sync status');
     }
   };
 
@@ -166,6 +179,7 @@ export const DashboardPage = () => {
               <thead className="bg-[#121214]">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Sync</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Name</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">Namespace</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-zinc-400 uppercase tracking-wider border-b border-[#27272A]">IP Allowlist</th>
@@ -186,6 +200,30 @@ export const DashboardPage = () => {
                         <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
                           <PowerOff size={12} className="mr-1" />
                           Disabled
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3" data-testid={`sync-status-${app.id}`}>
+                      {syncAvailable === null ? (
+                        <span className="text-xs text-zinc-600">...</span>
+                      ) : syncAvailable === false ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-zinc-500/10 text-zinc-500 border border-zinc-500/20" title="Cluster not connected">
+                          <CloudOff size={12} className="mr-1" />
+                          N/A
+                        </span>
+                      ) : syncStatus[app.id]?.synced ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" title="Namespace and middleware exist in cluster">
+                          <CheckCircle size={12} className="mr-1" />
+                          Synced
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20" title={
+                          !syncStatus[app.id]?.namespace_exists
+                            ? 'Namespace not found in cluster'
+                            : 'Middleware not found in cluster'
+                        }>
+                          <AlertTriangle size={12} className="mr-1" />
+                          {!syncStatus[app.id]?.namespace_exists ? 'No NS' : 'No MW'}
                         </span>
                       )}
                     </td>
