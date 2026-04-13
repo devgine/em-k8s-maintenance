@@ -296,10 +296,10 @@ async def create_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
             "namespace": namespace
         },
         "spec": {
-            "ipStrategy": {
-                "excludedIPs": excluded_ips,
-            },
             "ipAllowList": {
+                "ipStrategy": {
+                    "excludedIPs": excluded_ips,
+                },
                 "sourceRange": ip_allowlist if ip_allowlist else ["0.0.0.0/0"]
             }
         }
@@ -341,10 +341,10 @@ async def update_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
             "namespace": namespace
         },
         "spec": {
-            "ipStrategy": {
-                "excludedIPs": excluded_ips,
-            },
             "ipAllowList": {
+                "ipStrategy": {
+                    "excludedIPs": excluded_ips,
+                },
                 "sourceRange": ip_allowlist if ip_allowlist else ["0.0.0.0/0"]
             }
         }
@@ -623,10 +623,10 @@ async def get_application_yaml(
             "namespace": app_doc["namespace"]
         },
         "spec": {
-            "ipStrategy": {
-                "excludedIPs": excluded_ips,
-            },
             "ipAllowList": {
+                "ipStrategy": {
+                    "excludedIPs": excluded_ips,
+                },
                 "sourceRange": ip_values
             }
         }
