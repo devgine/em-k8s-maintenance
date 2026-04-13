@@ -29,6 +29,7 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 - Dashboard shows ALL IPs per app, each on a separate line
 - YAML preview — fetches real middleware YAML from K8s cluster, falls back to generated YAML with source badge
 - User role can enable/disable applications and manage IP templates
+- Sync status indicator — checks namespace + middleware existence in K8s cluster, shows green (synced), red (No NS / No MW), or gray N/A (cluster unavailable)
 
 ## Key Endpoints
 - `POST /api/auth/local-login` — local admin login
@@ -36,6 +37,7 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 - `GET/POST/PUT/DELETE /api/ip-templates` — template CRUD
 - `GET /api/ip-templates/usage` — template usage counts
 - `GET /api/applications/{id}/yaml` — real or generated Traefik middleware YAML
+- `GET /api/applications/sync-status` — cluster sync status per app
 - `POST /api/applications/{id}/toggle` — enable/disable (admin + user)
 - `GET /api/namespaces` — list K8s namespaces
 

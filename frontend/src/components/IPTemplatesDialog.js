@@ -8,7 +8,7 @@ import { Plus, X, BookmarkCheck, Pencil, Check } from 'lucide-react';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
-export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) => {
+export const IPTemplatesDialog = ({ open, onOpenChange }) => {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -108,18 +108,18 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
       toast.error('Invalid IP address or CIDR range');
       return;
     }
-
+    
     setUpdating(true);
     try {
       const { data } = await api.put(`/ip-templates/${templateId}`, editForm);
       const affected = data.affected_apps || [];
-
+      
       if (affected.length > 0) {
         toast.success(`Template updated. ${affected.length} application(s) updated: ${affected.join(', ')}`);
       } else {
         toast.success('Template updated successfully');
       }
-
+      
       setEditingId(null);
       fetchTemplates();
     } catch (error) {
@@ -136,7 +136,6 @@ export const IPTemplatesDialog = ({ open, onOpenChange, onTemplatesChanged }) =>
       const { data } = await api.delete(`/ip-templates/${templateId}`);
       toast.success(data.message || 'Template deleted successfully');
       fetchTemplates();
-      if (onTemplatesChanged) onTemplatesChanged();
     } catch (error) {
       toast.error('Failed to delete template');
     }
