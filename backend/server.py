@@ -621,6 +621,9 @@ async def get_application_yaml(
             "namespace": app_doc["namespace"]
         },
         "spec": {
+            "ipStrategy": {
+                "excludedIPs": os.environ.get('TRAEFIK_EXCLUDED_IPS', ""),
+            },
             "ipAllowList": {
                 "sourceRange": ip_values
             }
