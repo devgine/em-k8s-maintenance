@@ -630,6 +630,55 @@ async def get_application_yaml(
     yaml_str = yaml.dump(middleware, default_flow_style=False, sort_keys=False)
     return {"yaml": yaml_str, "name": app_doc["name"], "namespace": app_doc["namespace"]}
 
+@api_router.get("/applications/sync-status")
+async def get_sync_status(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
+    """Check sync status of all applications against the K8s cluster."""
+    if not k8s_custom_api or not k8s_core_api:
+        return {"available": False, "status": {}}
+
+    apps = await db.applications.find({}).to_list(1000)
+    ns_cache = {}
+    result = {}
+
+    for app_doc in apps:
+        app_id = str(app_doc["_id"])
+        namespace = app_doc["namespace"]
+        middleware_name = urllib.parse.quote(app_doc["name"], safe='')
+
+        # Check namespace (cached)
+        if namespace not in ns_cache:
+            try:
+                k8s_core_api.read_namespace(namespace)
+                ns_cache[namespace] = True
+            except ApiException:
+                ns_cache[namespace] = False
+            except Exception:
+                ns_cache[namespace] = False
+        ns_ok = ns_cache[namespace]
+
+        # Check middleware
+        mw_ok = False
+        if ns_ok:
+            try:
+                k8s_custom_api.get_namespaced_custom_object(
+                    group="traefik.io", version="v1alpha1",
+                    namespace=namespace, plural="middlewares",
+                    name=middleware_name
+                )
+                mw_ok = True
+            except ApiException:
+                mw_ok = False
+            except Exception:
+                mw_ok = False
+
+        result[app_id] = {
+            "namespace_exists": ns_ok,
+            "middleware_exists": mw_ok,
+            "synced": ns_ok and mw_ok
+        }
+
+    return {"available": True, "status": result}
+
 @api_router.get("/applications")
 async def list_applications(user: Dict = Depends(require_role(["admin", "user", "readonly"]))):
     apps = await db.applications.find({}).to_list(1000)
