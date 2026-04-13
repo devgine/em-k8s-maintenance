@@ -501,6 +501,8 @@ class TestNewFeatures:
         assert "kind: Middleware" in yaml_content
         assert "metadata:" in yaml_content
         assert "spec:" in yaml_content
+        assert "ipStrategy:" in yaml_content
+        assert "excludedIPs:" in yaml_content
         assert "ipAllowList:" in yaml_content
         assert "sourceRange:" in yaml_content
         
