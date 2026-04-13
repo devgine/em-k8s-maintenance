@@ -294,6 +294,9 @@ async def create_traefik_middleware(name: str, namespace: str, ip_allowlist: Lis
             "namespace": namespace
         },
         "spec": {
+            "ipStrategy": {
+                "excludedIPs": os.environ.get('TRAEFIK_EXCLUDED_IPS', ""),
+            },
             "ipAllowList": {
                 "sourceRange": ip_allowlist if ip_allowlist else ["0.0.0.0/0"]
             }

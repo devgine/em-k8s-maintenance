@@ -203,13 +203,15 @@ k8s-maintenance/
 - ✅ Delete applications
 - ✅ Enable/disable applications
 - ✅ View all applications
+- ✅ Manage IP templates
 
 ### User Role
 - ❌ Cannot create applications
 - ✅ Update IP allowlists
 - ❌ Cannot delete applications
-- ❌ Cannot enable/disable
+- ✅ Enable/disable applications
 - ✅ View all applications
+- ✅ Manage IP templates
 
 ### Readonly Role
 - ❌ Cannot create applications
@@ -217,6 +219,7 @@ k8s-maintenance/
 - ❌ Cannot delete applications
 - ❌ Cannot enable/disable
 - ✅ View all applications
+- ✅ View all IP templates
 
 ## 🔐 Security Best Practices
 
