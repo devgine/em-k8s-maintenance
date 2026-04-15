@@ -6,7 +6,7 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 ## Architecture
 - **Backend**: FastAPI (Python) on port 8001, MongoDB via Motor AsyncIO
 - **Frontend**: React on port 3000, Shadcn UI, dark theme
-- **Auth**: Dual — Keycloak JWT + Local Super Admin (bcrypt + JWT)
+- **Auth**: Dual — Keycloak OAuth2 code exchange + Local Super Admin (bcrypt + JWT)
 - **K8s**: `kubernetes` Python client for Traefik middleware CRUD (gracefully mocked outside cluster)
 
 ## DB Schema
@@ -21,7 +21,7 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 
 ## Completed Features
 - Full CRUD for applications and IP templates
-- Keycloak + local super admin auth with role-based access
+- Keycloak OAuth2 auth (code exchange flow) + local super admin auth with role-based access
 - Relational linking: templates <-> application allowlists
 - Template update propagation to all linked applications
 - Dashboard auto-refresh on template edit/delete
@@ -29,10 +29,12 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 - Dashboard shows ALL IPs per app, each on a separate line
 - YAML preview — fetches real middleware YAML from K8s cluster, falls back to generated YAML with source badge
 - User role can enable/disable applications and manage IP templates
-- Sync status indicator — checks namespace + middleware existence in K8s cluster, shows green (synced), red (No NS / No MW), or gray N/A (cluster unavailable)
+- Sync status indicator — checks namespace + middleware existence in K8s cluster
+- Keycloak auth code exchange via backend (POST /api/auth/keycloak-callback)
 
 ## Key Endpoints
 - `POST /api/auth/local-login` — local admin login
+- `POST /api/auth/keycloak-callback` — exchange Keycloak auth code for token
 - `GET/POST/PUT/DELETE /api/applications` — app CRUD
 - `GET/POST/PUT/DELETE /api/ip-templates` — template CRUD
 - `GET /api/ip-templates/usage` — template usage counts
@@ -40,6 +42,18 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 - `GET /api/applications/sync-status` — cluster sync status per app
 - `POST /api/applications/{id}/toggle` — enable/disable (admin + user)
 - `GET /api/namespaces` — list K8s namespaces
+
+## Keycloak Configuration
+Backend .env:
+- KEYCLOAK_SERVER_URL — e.g. https://keycloak.example.com
+- KEYCLOAK_REALM — e.g. maintenance
+- KEYCLOAK_CLIENT_ID — e.g. k8s-maintenance-app
+- KEYCLOAK_CLIENT_SECRET — (if confidential client)
+
+Frontend .env:
+- REACT_APP_KEYCLOAK_URL — same as KEYCLOAK_SERVER_URL
+- REACT_APP_KEYCLOAK_REALM — same realm name
+- REACT_APP_KEYCLOAK_CLIENT_ID — same client ID
 
 ## Backlog
 None — all requested features delivered.

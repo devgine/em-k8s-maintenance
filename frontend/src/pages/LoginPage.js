@@ -15,6 +15,7 @@ export const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('keycloak');
   const [loading, setLoading] = useState(false);
+  const [keycloakLoading, setKeycloakLoading] = useState(false);
 
   const keycloakUrl = process.env.REACT_APP_KEYCLOAK_URL;
   const keycloakRealm = process.env.REACT_APP_KEYCLOAK_REALM;
@@ -26,19 +27,46 @@ export const LoginPage = () => {
   useEffect(() => {
     if (user) {
       navigate('/dashboard');
+      return;
     }
 
-    // Check for Keycloak redirect
+    // Check for Keycloak redirect with authorization code
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     
     if (code) {
-      // Exchange code for token (this would be done via backend in production)
-      toast.info('Processing authentication...');
-      // For now, just show message
       window.history.replaceState({}, document.title, '/login');
+      exchangeKeycloakCode(code);
     }
   }, [user, navigate]);
+
+  const exchangeKeycloakCode = async (code) => {
+    setKeycloakLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/keycloak-callback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          redirect_uri: redirectUri
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Keycloak authentication failed');
+      }
+
+      const data = await response.json();
+      login(data.access_token);
+      toast.success('Logged in via Keycloak');
+      navigate('/dashboard');
+    } catch (error) {
+      toast.error(error.message || 'Keycloak authentication failed');
+    } finally {
+      setKeycloakLoading(false);
+    }
+  };
 
   const handleLoginWithKeycloak = () => {
     const authUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/auth?client_id=${keycloakClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid`;
@@ -110,6 +138,13 @@ export const LoginPage = () => {
         </div>
 
         <div className="bg-[#121214] border border-[#27272A] rounded-md p-8">
+          {keycloakLoading ? (
+            <div className="text-center py-8" data-testid="keycloak-loading">
+              <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+              <p className="text-zinc-400 text-sm">Authenticating with Keycloak...</p>
+            </div>
+          ) : (
+          <div>
           <div className="mb-6">
             <div className="flex gap-2 mb-6">
               <button
@@ -248,6 +283,8 @@ export const LoginPage = () => {
               </form>
             )}
           </div>
+          </div>
+          )}
         </div>
       </div>
     </div>

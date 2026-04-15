@@ -49,6 +49,7 @@ api_router = APIRouter(prefix="/api")
 KEYCLOAK_SERVER_URL = os.environ.get('KEYCLOAK_SERVER_URL')
 KEYCLOAK_REALM = os.environ.get('KEYCLOAK_REALM')
 KEYCLOAK_CLIENT_ID = os.environ.get('KEYCLOAK_CLIENT_ID')
+KEYCLOAK_CLIENT_SECRET = os.environ.get('KEYCLOAK_CLIENT_SECRET')
 
 # Local super admin configuration
 SUPER_ADMIN_USERNAME = os.environ.get('SUPER_ADMIN_USERNAME', 'superadmin')
@@ -415,6 +416,50 @@ async def local_login(credentials: LocalLoginRequest):
             "email": f"{admin_user['username']}@local",
             "roles": ["admin"]
         }
+    }
+
+class KeycloakCallbackRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
+@api_router.post("/auth/keycloak-callback")
+async def keycloak_callback(payload: KeycloakCallbackRequest):
+    """Exchange Keycloak authorization code for access token."""
+    if not KEYCLOAK_SERVER_URL or not KEYCLOAK_REALM or not KEYCLOAK_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Keycloak is not configured on the server")
+
+    token_url = f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
+
+    token_data = {
+        "grant_type": "authorization_code",
+        "code": payload.code,
+        "redirect_uri": payload.redirect_uri,
+        "client_id": KEYCLOAK_CLIENT_ID,
+    }
+    if KEYCLOAK_CLIENT_SECRET:
+        token_data["client_secret"] = KEYCLOAK_CLIENT_SECRET
+
+    try:
+        token_response = requests.post(token_url, data=token_data, timeout=10)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Keycloak token exchange failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Cannot reach Keycloak server: {str(e)}")
+
+    if token_response.status_code != 200:
+        error_detail = token_response.json().get("error_description", token_response.text)
+        logger.error(f"Keycloak token exchange error: {error_detail}")
+        raise HTTPException(status_code=401, detail=f"Keycloak authentication failed: {error_detail}")
+
+    tokens = token_response.json()
+    access_token = tokens.get("access_token")
+
+    if not access_token:
+        raise HTTPException(status_code=401, detail="No access token received from Keycloak")
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": tokens.get("refresh_token"),
     }
 
 @api_router.get("/user/info")
