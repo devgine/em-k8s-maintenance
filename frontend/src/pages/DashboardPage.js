@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
-import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck, FileCode, AlertTriangle, CheckCircle, CloudOff } from 'lucide-react';
+import { Shield, Plus, LogOut, Power, PowerOff, Pencil, Trash2, Server, BookmarkCheck, FileCode, AlertTriangle, CheckCircle, CloudOff, History } from 'lucide-react';
 import { ApplicationDialog } from '../components/ApplicationDialog';
 import { ApplicationUpdateDialog } from '../components/ApplicationUpdateDialog';
 import { IPTemplatesDialog } from '../components/IPTemplatesDialog';
 import { YamlPreviewDialog } from '../components/YamlPreviewDialog';
+import { AuditLogDialog } from '../components/AuditLogDialog';
 import api, { formatApiErrorDetail } from '../utils/api';
 import { toast } from 'sonner';
 
@@ -19,6 +20,7 @@ export const DashboardPage = () => {
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [templatesDialogOpen, setTemplatesDialogOpen] = useState(false);
   const [yamlDialogOpen, setYamlDialogOpen] = useState(false);
+  const [auditDialogOpen, setAuditDialogOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
   const [syncStatus, setSyncStatus] = useState({});
   const [syncAvailable, setSyncAvailable] = useState(null);
@@ -136,6 +138,15 @@ export const DashboardPage = () => {
             <p className="text-sm text-zinc-400">Manage Traefik middleware IP allowlists</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setAuditDialogOpen(true)}
+              variant="outline"
+              className="border-[#27272A] text-zinc-50 hover:bg-[#18181B]"
+              data-testid="audit-log-button"
+            >
+              <History size={18} className="mr-2" />
+              Audit Log
+            </Button>
             {(isAdmin() || isUser()) && (
               <Button
                 onClick={() => setTemplatesDialogOpen(true)}
@@ -328,6 +339,11 @@ export const DashboardPage = () => {
         open={yamlDialogOpen}
         onOpenChange={setYamlDialogOpen}
         application={selectedApp}
+      />
+
+      <AuditLogDialog
+        open={auditDialogOpen}
+        onOpenChange={setAuditDialogOpen}
       />
     </div>
   );

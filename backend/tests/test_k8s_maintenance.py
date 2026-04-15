@@ -844,6 +844,300 @@ class TestIPTemplatesUserRole:
         print("IP Templates CRUD verified (admin role, user role has same permissions)")
 
 
+class TestAuditLog:
+    """
+    NEW FEATURE TESTS: Audit Log tracks who changed what (template edits, app toggles, allowlist updates)
+    GET /api/audit-logs returns logs with filtering by action type and target type
+    """
+    
+    def test_audit_logs_endpoint_exists(self, auth_token):
+        """
+        NEW FEATURE: GET /api/audit-logs endpoint exists and returns valid response
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Verify response structure
+        assert "logs" in data, "Response missing 'logs' field"
+        assert "total" in data, "Response missing 'total' field"
+        assert isinstance(data["logs"], list)
+        assert isinstance(data["total"], int)
+        
+        print(f"Audit logs response: total={data['total']}, logs count={len(data['logs'])}")
+    
+    def test_audit_logs_requires_authentication(self):
+        """
+        NEW FEATURE: Audit logs endpoint requires authentication
+        """
+        response = requests.get(f"{BASE_URL}/api/audit-logs")
+        assert response.status_code in [401, 403], \
+            f"Expected 401/403 without auth, got {response.status_code}"
+        print("Audit logs endpoint correctly requires authentication")
+    
+    def test_audit_log_entry_structure(self, auth_token):
+        """
+        NEW FEATURE: Verify audit log entry has required fields
+        Each entry should have: user, action, target_type, target_name, details, timestamp
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        if data["logs"]:
+            log_entry = data["logs"][0]
+            required_fields = ["user", "action", "target_type", "target_name", "timestamp"]
+            for field in required_fields:
+                assert field in log_entry, f"Log entry missing '{field}' field"
+            
+            # Verify action is one of expected values
+            valid_actions = ["created", "updated", "deleted", "toggled"]
+            assert log_entry["action"] in valid_actions, \
+                f"Invalid action: {log_entry['action']}"
+            
+            # Verify target_type is one of expected values
+            valid_types = ["application", "template"]
+            assert log_entry["target_type"] in valid_types, \
+                f"Invalid target_type: {log_entry['target_type']}"
+            
+            print(f"Log entry structure verified: {log_entry}")
+        else:
+            print("No log entries to verify structure (will be created by other tests)")
+    
+    def test_audit_logs_filter_by_action(self, auth_token):
+        """
+        NEW FEATURE: Filter audit logs by action type (created, updated, deleted, toggled)
+        """
+        # First get all logs to see what actions exist
+        all_response = requests.get(
+            f"{BASE_URL}/api/audit-logs",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        all_data = all_response.json()
+        
+        # Test filtering by 'toggled' action
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=toggled",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # All returned logs should have action='toggled'
+        for log in data["logs"]:
+            assert log["action"] == "toggled", \
+                f"Filter failed: expected action='toggled', got '{log['action']}'"
+        
+        print(f"Filter by action='toggled': {data['total']} entries")
+        
+        # Test filtering by 'updated' action
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=updated",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        for log in data["logs"]:
+            assert log["action"] == "updated", \
+                f"Filter failed: expected action='updated', got '{log['action']}'"
+        
+        print(f"Filter by action='updated': {data['total']} entries")
+    
+    def test_audit_logs_filter_by_target_type(self, auth_token):
+        """
+        NEW FEATURE: Filter audit logs by target type (application, template)
+        """
+        # Test filtering by 'template' target_type
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs?target_type=template",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # All returned logs should have target_type='template'
+        for log in data["logs"]:
+            assert log["target_type"] == "template", \
+                f"Filter failed: expected target_type='template', got '{log['target_type']}'"
+        
+        print(f"Filter by target_type='template': {data['total']} entries")
+        
+        # Test filtering by 'application' target_type
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs?target_type=application",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        for log in data["logs"]:
+            assert log["target_type"] == "application", \
+                f"Filter failed: expected target_type='application', got '{log['target_type']}'"
+        
+        print(f"Filter by target_type='application': {data['total']} entries")
+    
+    def test_audit_logs_combined_filters(self, auth_token):
+        """
+        NEW FEATURE: Test combining action and target_type filters
+        """
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=toggled&target_type=application",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # All returned logs should match both filters
+        for log in data["logs"]:
+            assert log["action"] == "toggled", \
+                f"Filter failed: expected action='toggled', got '{log['action']}'"
+            assert log["target_type"] == "application", \
+                f"Filter failed: expected target_type='application', got '{log['target_type']}'"
+        
+        print(f"Combined filter (action=toggled, target_type=application): {data['total']} entries")
+    
+    def test_audit_logs_pagination(self, auth_token):
+        """
+        NEW FEATURE: Test pagination with limit and offset
+        """
+        # Get first page
+        response = requests.get(
+            f"{BASE_URL}/api/audit-logs?limit=5&offset=0",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert len(data["logs"]) <= 5, "Limit not respected"
+        total = data["total"]
+        
+        print(f"Pagination test: limit=5, offset=0, returned={len(data['logs'])}, total={total}")
+        
+        # If there are more than 5 entries, test offset
+        if total > 5:
+            response = requests.get(
+                f"{BASE_URL}/api/audit-logs?limit=5&offset=5",
+                headers={"Authorization": f"Bearer {auth_token}"}
+            )
+            assert response.status_code == 200
+            data2 = response.json()
+            
+            # Should return different entries
+            if data["logs"] and data2["logs"]:
+                assert data["logs"][0]["timestamp"] != data2["logs"][0]["timestamp"], \
+                    "Offset not working - same entries returned"
+            
+            print(f"Pagination test: limit=5, offset=5, returned={len(data2['logs'])}")
+    
+    def test_audit_log_created_on_toggle(self, auth_token):
+        """
+        NEW FEATURE: Verify toggle action creates audit log entry
+        """
+        # Get initial audit log count for toggled actions
+        initial_response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=toggled",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        initial_count = initial_response.json()["total"]
+        
+        # Get an application to toggle
+        apps_response = requests.get(
+            f"{BASE_URL}/api/applications",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        apps = apps_response.json()["applications"]
+        if not apps:
+            pytest.skip("No applications to test toggle audit log")
+        
+        app = apps[0]
+        original_enabled = app["enabled"]
+        
+        # Toggle the application
+        toggle_response = requests.post(
+            f"{BASE_URL}/api/applications/{app['id']}/toggle?enabled={str(not original_enabled).lower()}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        assert toggle_response.status_code == 200
+        
+        # Check audit log count increased
+        after_response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=toggled",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        after_count = after_response.json()["total"]
+        
+        assert after_count > initial_count, \
+            f"Toggle did not create audit log entry: before={initial_count}, after={after_count}"
+        
+        # Verify the new entry
+        new_entry = after_response.json()["logs"][0]
+        assert new_entry["action"] == "toggled"
+        assert new_entry["target_type"] == "application"
+        assert new_entry["target_name"] == app["name"]
+        assert "Enabled" in new_entry["details"] or "Disabled" in new_entry["details"]
+        
+        print(f"Toggle audit log created: {new_entry}")
+        
+        # Restore original state
+        requests.post(
+            f"{BASE_URL}/api/applications/{app['id']}/toggle?enabled={str(original_enabled).lower()}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+    
+    def test_audit_log_created_on_template_update(self, auth_token):
+        """
+        NEW FEATURE: Verify template update creates audit log entry
+        """
+        # Create a test template
+        create_response = requests.post(
+            f"{BASE_URL}/api/ip-templates",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"name": "TEST_AuditLog_Template", "value": "10.200.0.0/16", "description": "Test"}
+        )
+        assert create_response.status_code == 200
+        template_id = create_response.json()["id"]
+        
+        # Get initial audit log count for updated actions on templates
+        initial_response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=updated&target_type=template",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        initial_count = initial_response.json()["total"]
+        
+        # Update the template
+        update_response = requests.put(
+            f"{BASE_URL}/api/ip-templates/{template_id}",
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"value": "10.201.0.0/16"}
+        )
+        assert update_response.status_code == 200
+        
+        # Check audit log count increased
+        after_response = requests.get(
+            f"{BASE_URL}/api/audit-logs?action=updated&target_type=template",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+        after_count = after_response.json()["total"]
+        
+        assert after_count > initial_count, \
+            f"Template update did not create audit log entry: before={initial_count}, after={after_count}"
+        
+        print(f"Template update audit log created")
+        
+        # Cleanup
+        requests.delete(
+            f"{BASE_URL}/api/ip-templates/{template_id}",
+            headers={"Authorization": f"Bearer {auth_token}"}
+        )
+
+
 # Fixtures
 @pytest.fixture
 def auth_token():

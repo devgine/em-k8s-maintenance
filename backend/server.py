@@ -385,10 +385,46 @@ async def get_k8s_namespaces() -> List[str]:
         logging.error(f"Failed to list namespaces: {e}")
         return []
 
+# Audit log helper
+async def audit_log(action: str, target_type: str, target_name: str, user: Dict, details: str = ""):
+    """Record an action in the audit log."""
+    await db.audit_logs.insert_one({
+        "action": action,
+        "target_type": target_type,
+        "target_name": target_name,
+        "user": user.get("username") or user.get("email", "unknown"),
+        "details": details,
+        "timestamp": datetime.now(timezone.utc)
+    })
+
 # API Routes
 @api_router.get("/health")
 async def health_check():
     return {"status": "healthy", "kubernetes": k8s_custom_api is not None}
+
+@api_router.get("/audit-logs")
+async def list_audit_logs(
+    limit: int = 50,
+    offset: int = 0,
+    action: Optional[str] = None,
+    target_type: Optional[str] = None,
+    user: Dict = Depends(require_role(["admin", "user", "readonly"]))
+):
+    """List audit log entries with optional filtering."""
+    query = {}
+    if action:
+        query["action"] = action
+    if target_type:
+        query["target_type"] = target_type
+
+    total = await db.audit_logs.count_documents(query)
+    logs = await db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(offset).limit(limit).to_list(limit)
+
+    for log_entry in logs:
+        if isinstance(log_entry.get("timestamp"), datetime):
+            log_entry["timestamp"] = log_entry["timestamp"].isoformat()
+
+    return {"logs": logs, "total": total}
 
 @api_router.post("/auth/local-login")
 async def local_login(credentials: LocalLoginRequest):
@@ -501,6 +537,7 @@ async def create_ip_template(
     result = await db.ip_templates.insert_one(template_doc)
     template_doc["id"] = str(result.inserted_id)
     template_doc.pop("_id", None)
+    await audit_log("created", "template", template.name, user, f"IP: {template.value}")
     return template_doc
 
 @api_router.delete("/ip-templates/{template_id}")
@@ -532,6 +569,7 @@ async def delete_ip_template(
             )
         
         await db.ip_templates.delete_one({"_id": ObjectId(template_id)})
+        await audit_log("deleted", "template", template["name"], user, f"Affected {len(apps_using)} app(s)")
         return {"message": "Template deleted successfully", "affected_apps": len(apps_using)}
     except HTTPException:
         raise
@@ -617,6 +655,9 @@ async def update_ip_template(
             
             affected_apps.append(app_doc["name"])
     
+    changes = ", ".join(f"{k}={v}" for k, v in update_fields.items() if k != "updated_at")
+    await audit_log("updated", "template", template["name"], user, f"Changes: {changes}. Propagated to: {', '.join(affected_apps) if affected_apps else 'none'}")
+
     return {
         "message": "Template updated successfully",
         "affected_apps": affected_apps
@@ -785,6 +826,7 @@ async def create_application(
     
     app_doc["id"] = str(result.inserted_id)
     app_doc.pop("_id", None)
+    await audit_log("created", "application", app_data.name, user, f"Namespace: {app_data.namespace}")
     return app_doc
 
 @api_router.get("/applications/{app_id}")
@@ -834,6 +876,11 @@ async def update_application(
     ip_values = extract_ip_values(resolved_list) if app_doc.get("enabled", True) else ["0.0.0.0/0"]
     await update_traefik_middleware(app_doc["name"], app_doc["namespace"], ip_values)
     
+    ip_summary = ", ".join(e.get("value", "") for e in resolved_list[:5])
+    if len(resolved_list) > 5:
+        ip_summary += f" (+{len(resolved_list)-5} more)"
+    await audit_log("updated", "application", app_doc["name"], user, f"IP allowlist: {ip_summary}")
+
     return {"message": "Application updated successfully"}
 
 @api_router.delete("/applications/{app_id}")
@@ -855,6 +902,8 @@ async def delete_application(
     # Delete from MongoDB
     await db.applications.delete_one({"_id": ObjectId(app_id)})
     
+    await audit_log("deleted", "application", app["name"], user, f"Namespace: {app['namespace']}")
+
     return {"message": "Application deleted successfully"}
 
 @api_router.post("/applications/{app_id}/toggle")
@@ -884,6 +933,8 @@ async def toggle_application(
     ip_list = extract_ip_values(app.get("ip_allowlist", [])) if enabled else ["0.0.0.0/0"]
     await update_traefik_middleware(app["name"], app["namespace"], ip_list)
     
+    await audit_log("toggled", "application", app["name"], user, f"{'Enabled' if enabled else 'Disabled'}")
+
     return {"message": f"Application {'enabled' if enabled else 'disabled'} successfully"}
 
 # Include router
@@ -909,6 +960,7 @@ async def startup_event():
     await db.applications.create_index([("name", 1), ("namespace", 1)], unique=True)
     await db.super_admins.create_index("username", unique=True)
     await db.ip_templates.create_index("name", unique=True)
+    await db.audit_logs.create_index("timestamp", expireAfterSeconds=7776000)  # 90 days TTL
     
     # Seed super admin
     if SUPER_ADMIN_USERNAME and SUPER_ADMIN_PASSWORD:
