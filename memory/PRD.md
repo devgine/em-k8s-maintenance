@@ -11,49 +11,35 @@ Manage websites hosted in a Kubernetes cluster by managing Traefik `ip-allowlist
 
 ## DB Schema
 - `super_admins`: `{username, password_hash, created_at}`
-- `applications`: `{name, namespace, ip_allowlist: [{type:"manual"|"template", value, template_id?, template_name?}], enabled, created_at, updated_at, created_by}`
+- `applications`: `{name, namespace, ip_allowlist: [{type, value, template_id?, template_name?}], enabled, created_at, updated_at, created_by}`
 - `ip_templates`: `{name, value, description, created_by, created_at, updated_at?}`
+- `audit_logs`: `{action, target_type, target_name, user, details, timestamp}` (90-day TTL)
 
 ## Role Permissions
 - **admin**: Full access — create/delete apps, toggle, update allowlists, template CRUD
 - **user**: Toggle apps, update allowlists, create/update/delete IP templates
-- **readonly**: View only — dashboard, YAML preview
+- **readonly**: View only — dashboard, YAML preview, audit log
 
 ## Completed Features
 - Full CRUD for applications and IP templates
-- Keycloak OAuth2 auth (code exchange flow) + local super admin auth with role-based access
-- Relational linking: templates <-> application allowlists
-- Template update propagation to all linked applications
-- Dashboard auto-refresh on template edit/delete
-- Template usage counter — shows how many apps link to each template
-- Dashboard shows ALL IPs per app, each on a separate line
-- YAML preview — fetches real middleware YAML from K8s cluster, falls back to generated YAML with source badge
-- User role can enable/disable applications and manage IP templates
-- Sync status indicator — checks namespace + middleware existence in K8s cluster
-- Keycloak auth code exchange via backend (POST /api/auth/keycloak-callback)
+- Keycloak OAuth2 auth (code exchange flow) + local super admin auth
+- Relational linking: templates <-> application allowlists with auto-propagation
+- Template usage counter
+- Dashboard shows ALL IPs per app on separate lines
+- YAML preview — real cluster YAML or generated, with source badge
+- Sync status indicator — namespace + middleware existence check
+- Audit log — tracks all mutations with user, action, target, details, timestamp, filtering, pagination
 
 ## Key Endpoints
 - `POST /api/auth/local-login` — local admin login
 - `POST /api/auth/keycloak-callback` — exchange Keycloak auth code for token
+- `GET /api/audit-logs` — audit log with ?action= and ?target_type= filters
 - `GET/POST/PUT/DELETE /api/applications` — app CRUD
 - `GET/POST/PUT/DELETE /api/ip-templates` — template CRUD
 - `GET /api/ip-templates/usage` — template usage counts
-- `GET /api/applications/{id}/yaml` — real or generated Traefik middleware YAML
-- `GET /api/applications/sync-status` — cluster sync status per app
-- `POST /api/applications/{id}/toggle` — enable/disable (admin + user)
-- `GET /api/namespaces` — list K8s namespaces
-
-## Keycloak Configuration
-Backend .env:
-- KEYCLOAK_SERVER_URL — e.g. https://keycloak.example.com
-- KEYCLOAK_REALM — e.g. maintenance
-- KEYCLOAK_CLIENT_ID — e.g. k8s-maintenance-app
-- KEYCLOAK_CLIENT_SECRET — (if confidential client)
-
-Frontend .env:
-- REACT_APP_KEYCLOAK_URL — same as KEYCLOAK_SERVER_URL
-- REACT_APP_KEYCLOAK_REALM — same realm name
-- REACT_APP_KEYCLOAK_CLIENT_ID — same client ID
+- `GET /api/applications/{id}/yaml` — Traefik middleware YAML
+- `GET /api/applications/sync-status` — cluster sync status
+- `POST /api/applications/{id}/toggle` — enable/disable
 
 ## Backlog
 None — all requested features delivered.
