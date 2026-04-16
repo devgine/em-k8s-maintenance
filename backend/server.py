@@ -492,10 +492,34 @@ async def keycloak_callback(payload: KeycloakCallbackRequest):
     if not access_token:
         raise HTTPException(status_code=401, detail="No access token received from Keycloak")
 
+    # Decode the token (without full verification — Keycloak just issued it)
+    # to check if the user has at least one required client role
+    ALLOWED_ROLES = {"admin", "user", "readonly"}
+    try:
+        payload = jwt.decode(access_token, options={"verify_signature": False})
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Cannot decode Keycloak token")
+
+    roles = []
+    if "realm_access" in payload and "roles" in payload["realm_access"]:
+        roles.extend(payload["realm_access"]["roles"])
+    if "resource_access" in payload and KEYCLOAK_CLIENT_ID in payload["resource_access"]:
+        roles.extend(payload["resource_access"][KEYCLOAK_CLIENT_ID].get("roles", []))
+
+    app_roles = [r for r in roles if r in ALLOWED_ROLES]
+    if not app_roles:
+        username = payload.get("preferred_username", "unknown")
+        logger.warning(f"Keycloak user '{username}' denied: no app roles ({ALLOWED_ROLES}). Has roles: {roles}")
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied. Your Keycloak account does not have the required role. Ask your administrator to assign one of: {', '.join(ALLOWED_ROLES)}"
+        )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "refresh_token": tokens.get("refresh_token"),
+        "roles": app_roles,
     }
 
 @api_router.get("/user/info")
