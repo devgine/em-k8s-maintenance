@@ -496,7 +496,7 @@ async def keycloak_callback(payload: KeycloakCallbackRequest):
     # to check if the user has at least one required client role
     ALLOWED_ROLES = {"admin", "user", "readonly"}
     try:
-        payload = jwt.decode(access_token, options={"verify_signature": False})
+        payload = jwt.decode(access_token, key="", options={"verify_signature": False, "verify_aud": False, "verify_exp": False})
     except JWTError:
         raise HTTPException(status_code=401, detail="Cannot decode Keycloak token")
 
