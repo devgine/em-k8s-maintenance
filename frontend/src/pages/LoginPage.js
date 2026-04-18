@@ -10,7 +10,6 @@ import { toast } from 'sonner';
 export const LoginPage = () => {
   const navigate = useNavigate();
   const { login, user } = useAuth();
-  const [token, setToken] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('keycloak');
@@ -71,17 +70,6 @@ export const LoginPage = () => {
   const handleLoginWithKeycloak = () => {
     const authUrl = `${keycloakUrl}/realms/${keycloakRealm}/protocol/openid-connect/auth?client_id=${keycloakClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=openid`;
     window.location.href = authUrl;
-  };
-
-  const handleTokenLogin = (e) => {
-    e.preventDefault();
-    if (token.trim()) {
-      login(token);
-      toast.success('Logged in successfully');
-      navigate('/dashboard');
-    } else {
-      toast.error('Please enter a valid token');
-    }
   };
 
   const handleLocalLogin = async (e) => {
@@ -169,17 +157,6 @@ export const LoginPage = () => {
               >
                 Super Admin
               </button>
-              <button
-                onClick={() => setActiveTab('token')}
-                className={`flex-1 py-2 px-4 rounded text-sm font-medium transition-colors ${
-                  activeTab === 'token'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-[#09090B] text-zinc-400 hover:text-zinc-200'
-                }`}
-                data-testid="token-tab"
-              >
-                Token
-              </button>
             </div>
           </div>
 
@@ -247,37 +224,6 @@ export const LoginPage = () => {
                   <Info size={16} className="text-amber-400 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-zinc-400">
                     Super admin has full access to all resources. Credentials are stored locally in MongoDB.
-                  </p>
-                </div>
-              </form>
-            )}
-
-            {/* Manual Token Login */}
-            {activeTab === 'token' && (
-              <form onSubmit={handleTokenLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="token" className="text-zinc-50 text-xs tracking-[0.2em] uppercase font-bold">Access Token</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    placeholder="Paste your JWT token"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    className="bg-[#09090B] border-[#27272A] text-zinc-50 font-mono text-sm"
-                    data-testid="token-input"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium"
-                  data-testid="token-login-button"
-                >
-                  Login with Token
-                </Button>
-                <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
-                  <Info size={16} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-zinc-400">
-                    Get your access token from Keycloak admin console.
                   </p>
                 </div>
               </form>
